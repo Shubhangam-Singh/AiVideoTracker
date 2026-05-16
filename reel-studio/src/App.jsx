@@ -1,122 +1,184 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useState, useEffect } from 'react';
+import clsx from 'clsx';
+import { TASKS } from './data/index.js';
+import {
+  useTweaks,
+  TWEAK_DEFAULTS,
+} from './components/shared.jsx';
+import {
+  Sidebar,
+  Topbar,
+  Ledger,
+  MobileTopbar,
+  MobileNav,
+  MoreSheet,
+} from './components/Shell.jsx';
+import {
+  TweaksPanel,
+  TweakSection,
+  TweakSelect,
+  TweakRadio,
+  TweakSlider,
+  TweakToggle,
+  TweakButton,
+} from './components/TweaksPanel.jsx';
+import Dashboard from './pages/Dashboard.jsx';
+import Analytics from './pages/Analytics.jsx';
+import Chat from './pages/Chat.jsx';
+import Pipeline from './pages/Pipeline.jsx';
+import Prompts from './pages/Prompts.jsx';
+import Tasks from './pages/Tasks.jsx';
+import Tools from './pages/Tools.jsx';
+import Targets from './pages/Targets.jsx';
+import Strategy from './pages/Strategy.jsx';
 
-function App() {
-  const [count, setCount] = useState(0)
+const paperMap = {
+  warm:  { paper: '#F7F5F0', ink: '#1A1A18', surface: '#ECEAE4', surface2: '#E4E1DA' },
+  cool:  { paper: '#F2F3F2', ink: '#1A1B1C', surface: '#E6E8E7', surface2: '#DCDEDD' },
+  cream: { paper: '#FBF6E9', ink: '#1F1B12', surface: '#F0E9D2', surface2: '#E6DEC2' },
+  dusk:  { paper: '#211F1B', ink: '#EDE9DF', surface: '#2A2823', surface2: '#34322C' },
+};
+
+const accentMap = {
+  sage_terra: { a: '#8FAF8A', b: '#C4856A', as: '#cbd9c7', bs: '#e8cbbd' },
+  ocean_rust: { a: '#6E94B8', b: '#B8745A', as: '#c8d5e1', bs: '#e1c4b3' },
+  plum_olive: { a: '#94886E', b: '#9D7BA0', as: '#d6cfbf', bs: '#d4c4d5' },
+  ink_gold:   { a: '#8C8678', b: '#B89A56', as: '#cfcbc1', bs: '#e3d4ad' },
+};
+
+export default function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+  const [active, setActive] = useState(() => localStorage.getItem('reel.page') || 'dashboard');
+  const [tasks, setTasks] = useState(TASKS);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [chatThreadOpen, setChatThreadOpen] = useState(false);
+
+  useEffect(() => {
+    if (active !== 'chat') setChatThreadOpen(false);
+  }, [active]);
+
+  useEffect(() => {
+    localStorage.setItem('reel.page', active);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [active]);
+
+  const p = paperMap[t.paper] || paperMap.warm;
+  const ac = accentMap[t.accents] || accentMap.sage_terra;
+  const rootStyle = {
+    '--paper': p.paper, '--ink': p.ink, '--surface': p.surface, '--surface-2': p.surface2,
+    '--sage': ac.a, '--terracotta': ac.b, '--sage-soft': ac.as, '--terracotta-soft': ac.bs,
+    fontSize: t.fontScale + 'px',
+  };
+  if (t.paper === 'dusk') {
+    rootStyle['--hair'] = 'rgba(237,233,223,0.16)';
+    rootStyle['--hair-strong'] = 'rgba(237,233,223,0.34)';
+    rootStyle['--pencil'] = '#7E7B72';
+    rootStyle['--pencil-soft'] = '#3D3B36';
+  }
+
+  const densityClass = `density-${t.density || 'regular'}`;
+
+  const onToggleTask = (id) => {
+    setTasks(prev => prev.map(task => task.id === id ? { ...task, done: !task.done } : task));
+  };
+
+  let pageEl = null;
+  switch (active) {
+    case 'dashboard': pageEl = <Dashboard tasks={tasks} onToggleTask={onToggleTask} onNav={setActive} />; break;
+    case 'analytics': pageEl = <Analytics tweaks={t} />; break;
+    case 'chat':      pageEl = <Chat onMobileThreadOpenChange={setChatThreadOpen} />; break;
+    case 'pipeline':  pageEl = <Pipeline />; break;
+    case 'prompts':   pageEl = <Prompts />; break;
+    case 'tasks':     pageEl = <Tasks tasks={tasks} onToggleTask={onToggleTask} />; break;
+    case 'tools':     pageEl = <Tools />; break;
+    case 'targets':   pageEl = <Targets />; break;
+    case 'strategy':  pageEl = <Strategy />; break;
+    default:          pageEl = <Dashboard tasks={tasks} onToggleTask={onToggleTask} onNav={setActive} />;
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div className={clsx('app', densityClass)} style={rootStyle}>
+      <Sidebar active={active} onNav={setActive} />
+      <main>
+        <Topbar active={active} />
+        <MobileTopbar
+          active={active}
+          onMenu={() => setMoreOpen(true)}
+          onBack={chatThreadOpen ? () => { window.dispatchEvent(new CustomEvent('reel:chat-back')); } : null}
+          backLabel="Threads"
+        />
+        <div className="page" key={active}>
+          {pageEl}
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+        <Ledger active={active} />
+      </main>
+      <MobileNav active={active} onNav={setActive} onOpenMore={() => setMoreOpen(true)} />
+      {moreOpen && <MoreSheet active={active} onNav={setActive} onClose={() => setMoreOpen(false)} />}
 
-      <div className="ticks"></div>
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Palette" />
+        <TweakSelect
+          label="Pair"
+          value={t.accents}
+          options={[
+            { value: 'sage_terra', label: 'Sage · Terracotta' },
+            { value: 'ocean_rust', label: 'Ocean · Rust' },
+            { value: 'plum_olive', label: 'Olive · Plum' },
+            { value: 'ink_gold',   label: 'Stone · Gold' },
+          ]}
+          onChange={v => setTweak('accents', v)}
+        />
+        <TweakSelect
+          label="Paper"
+          value={t.paper}
+          options={[
+            { value: 'warm', label: 'Warm off-white' },
+            { value: 'cool', label: 'Cool gray' },
+            { value: 'cream', label: 'Cream' },
+            { value: 'dusk', label: 'Dusk (dark)' },
+          ]}
+          onChange={v => setTweak('paper', v)}
+        />
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+        <TweakSection label="Layout" />
+        <TweakRadio
+          label="Density"
+          value={t.density}
+          options={['compact', 'regular', 'spacious']}
+          onChange={v => setTweak('density', v)}
+        />
+        <TweakSlider
+          label="Font scale"
+          value={t.fontScale}
+          min={12} max={17} step={1} unit="px"
+          onChange={v => setTweak('fontScale', v)}
+        />
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+        <TweakSection label="Analytics" />
+        <TweakRadio
+          label="Chart style"
+          value={t.chartStyle}
+          options={['area', 'line', 'bars']}
+          onChange={v => setTweak('chartStyle', v)}
+        />
+        <TweakToggle
+          label="YouTube uses warm color"
+          value={t.ytFirst}
+          onChange={v => setTweak('ytFirst', v)}
+        />
+
+        <TweakSection label="Detail" />
+        <TweakToggle
+          label="Editorial annotations"
+          value={t.annotations}
+          onChange={v => setTweak('annotations', v)}
+        />
+        <TweakButton
+          label="Jump to Analytics"
+          onClick={() => setActive('analytics')}
+        />
+      </TweaksPanel>
+    </div>
+  );
 }
-
-export default App
