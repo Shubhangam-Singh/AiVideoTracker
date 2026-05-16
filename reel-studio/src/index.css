@@ -516,7 +516,12 @@ html { -webkit-text-size-adjust: 100%; }
 body {
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: contain;
+  overflow-x: hidden;
 }
+.app { overflow-x: hidden; }
+
+/* Chat back button: hidden by default, shown on mobile via media query */
+.chat-conv-header .back-btn { display: none; }
 button, a, .nav-item, .filter, .pill, .check, .task, .prow, .kcard, .tcard, .vault-card, .prompt-card, .tool-card {
   -webkit-tap-highlight-color: transparent;
 }
@@ -667,12 +672,41 @@ button, a, .nav-item, .filter, .pill, .check, .task, .prow, .kcard, .tcard, .vau
   .chat-shell.show-list .chat-conv { display: none; }
   .chat-shell.show-thread .chat-list { display: none; }
   .chat-list { border-right: 0 !important; }
-  .chat-conv-header .back-btn { display: flex !important; }
+  .chat-conv-header .back-btn { display: flex; align-items: center; gap: 4px; padding: 6px 10px 6px 6px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; color: var(--ink); border-radius: 999px; border: 0.5px solid var(--hair-strong); min-height: 36px; flex: none; }
 
   @keyframes pageEnter {
     from { opacity: 0; transform: translateX(14px); }
     to   { opacity: 1; transform: translateX(0); }
   }
+
+  /* Targets year-at-a-glance: horizontal swipe strip */
+  .targets-year-grid {
+    display: flex !important;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 14px;
+    margin: 0 -18px;
+    padding: 4px 18px 16px;
+    scrollbar-width: none;
+  }
+  .targets-year-grid::-webkit-scrollbar { display: none; }
+  .targets-year-grid .ring-wrap {
+    flex: 0 0 80vw;
+    scroll-snap-align: start;
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 20px;
+  }
+
+  /* Analytics: stack YT/IG cards to 1 col on mobile */
+  .analytics-platform-inner { grid-template-columns: 1fr !important; }
+
+  /* Retention curve: scroll sideways if wider than card */
+  .ret-scroll { overflow-x: auto; scrollbar-width: none; }
+  .ret-scroll::-webkit-scrollbar { display: none; }
+
+  /* Donut: shrink on mobile */
+  .donut-svg { width: 130px !important; height: 130px !important; }
 
   .ledger { display: none; }
 

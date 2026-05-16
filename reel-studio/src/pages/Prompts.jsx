@@ -5,6 +5,10 @@ import { PROMPTS } from '../data/index.js';
 export default function Prompts() {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('All');
+  const [expanded, setExpanded] = useState(new Set());
+  const toggleExpanded = (id) => setExpanded(prev => {
+    const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s;
+  });
   const tools = ['All', 'PicsArt Flow', 'Gemini', 'brainrot.mov', 'phot.ai'];
 
   const filtered = PROMPTS.filter(p => {
@@ -52,10 +56,12 @@ export default function Prompts() {
           <div className="vault-card" key={p.id}>
             <div className="vc-num">No. {String(i + 1).padStart(2, '0')}</div>
             <div className="vc-title">{p.title}</div>
-            <div className="vc-body">{p.body}</div>
+            <div className="vc-body" style={expanded.has(p.id) ? { display: 'block', WebkitLineClamp: 'unset' } : {}}>{p.body}</div>
             <div className="vc-meta">
               <span className="vc-frames">{p.frames > 0 ? `${p.frames} frames` : 'concept only'} &nbsp;·&nbsp; {p.tool.toLowerCase()}</span>
-              <button className="expand-btn">Expand →</button>
+              <button className="expand-btn" onClick={() => toggleExpanded(p.id)}>
+                {expanded.has(p.id) ? 'Collapse ↑' : 'Expand →'}
+              </button>
             </div>
           </div>
         ))}

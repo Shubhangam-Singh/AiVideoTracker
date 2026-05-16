@@ -70,7 +70,7 @@ export default function Targets() {
 
       <SectionHead num="·" title="Year, at a glance" sub="three rings" />
       <div className="card" style={{ padding: '36px 32px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 28 }}>
+        <div className="targets-year-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 28 }}>
           {[
             { label: 'Videos published', pct: 0.42, v: '42', of: '100 yr', color: 'sage', note: 'on pace' },
             { label: 'Views — 12 mo',    pct: 0.61, v: '1.2M', of: '2.0M', color: 'sage', note: 'ahead' },

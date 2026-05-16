@@ -50,7 +50,16 @@ export default function App() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
 
   const [active, setActive] = useState(() => localStorage.getItem('reel.page') || 'dashboard');
-  const [tasks, setTasks] = useState(TASKS);
+  const [tasks, setTasks] = useState(() => {
+    try {
+      const saved = localStorage.getItem('reel.tasks');
+      if (saved) {
+        const savedMap = new Map(JSON.parse(saved).map(t => [t.id, t]));
+        return TASKS.map(t => savedMap.has(t.id) ? { ...t, done: savedMap.get(t.id).done } : t);
+      }
+    } catch {}
+    return TASKS;
+  });
   const [moreOpen, setMoreOpen] = useState(false);
   const [chatThreadOpen, setChatThreadOpen] = useState(false);
 
@@ -80,7 +89,11 @@ export default function App() {
   const densityClass = `density-${t.density || 'regular'}`;
 
   const onToggleTask = (id) => {
-    setTasks(prev => prev.map(task => task.id === id ? { ...task, done: !task.done } : task));
+    setTasks(prev => {
+      const next = prev.map(task => task.id === id ? { ...task, done: !task.done } : task);
+      try { localStorage.setItem('reel.tasks', JSON.stringify(next)); } catch {}
+      return next;
+    });
   };
 
   let pageEl = null;

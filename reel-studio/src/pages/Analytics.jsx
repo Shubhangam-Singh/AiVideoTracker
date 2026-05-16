@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import clsx from 'clsx';
 import { ANALYTICS, fmt, fmtFull } from '../data/index.js';
 import { SectionHead } from '../components/shared.jsx';
@@ -174,7 +174,7 @@ function Donut({ yt, ig, ytColor, igColor, size = 180 }) {
   const ytFrac = yt / total;
   const ytDash = c * ytFrac;
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+    <svg className="donut-svg" width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       <circle cx={size/2} cy={size/2} r={r} stroke={igColor} strokeWidth="14" fill="none" />
       <circle cx={size/2} cy={size/2} r={r} stroke={ytColor} strokeWidth="14" fill="none"
         strokeDasharray={`${ytDash} ${c}`}
@@ -191,16 +191,17 @@ function Donut({ yt, ig, ytColor, igColor, size = 180 }) {
   );
 }
 
-function Sparkline({ data, color, height = 38, width = 140 }) {
+function Sparkline({ data, color, height = 38 }) {
+  const W = 140;
   const max = Math.max(...data) * 1.05;
   const min = Math.min(...data) * 0.85;
-  const xs = (i) => i * (width / (data.length - 1));
+  const xs = (i) => i * (W / (data.length - 1));
   const ys = (v) => height - ((v - min) / (max - min)) * height;
   let d = `M ${xs(0)} ${ys(data[0])}`;
   for (let i = 1; i < data.length; i++) d += ` L ${xs(i)} ${ys(data[i])}`;
   let dFill = d + ` L ${xs(data.length - 1)} ${height} L ${xs(0)} ${height} Z`;
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: 'block' }}>
+    <svg width="100%" height={height} viewBox={`0 0 ${W} ${height}`} preserveAspectRatio="none" style={{ display: 'block' }}>
       <path d={dFill} fill={color} opacity="0.12" />
       <path d={d} fill="none" stroke={color} strokeWidth="1.2" strokeLinejoin="round" />
     </svg>
@@ -253,7 +254,7 @@ function PerReelGrid({ ytColor, igColor }) {
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div className="analytics-platform-inner" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                   {['yt', 'ig'].map(p => {
                     const m = v[p];
                     const c = p === 'yt' ? ytHex : igHex;
@@ -272,7 +273,7 @@ function PerReelGrid({ ytColor, igColor }) {
                           {fmt(m.views)}
                         </div>
                         <div style={{ marginTop: 8 }}>
-                          <Sparkline data={v.daily.map(d => d[p])} color={c} width={240} height={32} />
+                          <Sparkline data={v.daily.map(d => d[p])} color={c} height={32} />
                         </div>
                         <div style={{ display: 'flex', gap: 14, marginTop: 10, fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--pencil)', letterSpacing: '0.06em' }}>
                           <span>♥ {fmt(m.likes)}</span>
@@ -302,7 +303,9 @@ function PerReelGrid({ ytColor, igColor }) {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
                     <div>
                       <div className="eyebrow" style={{ marginBottom: 8 }}>retention</div>
+                      <div className="ret-scroll">
                       <RetentionCurve data1={v.retYt} data2={v.retIg} color1={ytHex} color2={igHex} width={280} height={80} />
+                      </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--pencil)', letterSpacing: '0.08em' }}>
                         <span>0s</span><span>50% mark</span><span>end</span>
                       </div>
@@ -348,9 +351,18 @@ export default function Analytics({ tweaks }) {
   const igColor = tweaks.ytFirst ? 'var(--sage)' : 'var(--terracotta)';
 
   const totals = ANALYTICS.totals;
-  const daily = range === '7d' ? ANALYTICS.daily.slice(-7)
-              : range === '90d' ? ANALYTICS.daily
-              : ANALYTICS.daily;
+  const daily = useMemo(() => {
+    if (range === '7d') return ANALYTICS.daily.slice(-7);
+    if (range === '90d') {
+      const base = ANALYTICS.daily;
+      return [
+        ...base,
+        ...base.map(d => ({ ...d, d: d.d + 30, yt: Math.round(d.yt * 0.88), ig: Math.round(d.ig * 1.12) })),
+        ...base.map(d => ({ ...d, d: d.d + 60, yt: Math.round(d.yt * 0.74), ig: Math.round(d.ig * 1.26) })),
+      ];
+    }
+    return ANALYTICS.daily;
+  }, [range]);
 
   const totalReach = totals.yt.views + totals.ig.views;
   const totalEng   = (totals.yt.likes + totals.yt.comments + totals.yt.shares + totals.yt.saves

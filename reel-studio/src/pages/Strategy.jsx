@@ -5,7 +5,7 @@ export default function Strategy() {
         <div>
           <div className="eyebrow" style={{ marginBottom: 14 }}>[ 07 ] &nbsp; Strategy</div>
           <h1>The <span style={{ fontStyle: 'italic' }}>working notebook.</span></h1>
-          <div className="sub">A living page. Edit anything. Cross out what no longer feels true.</div>
+          <div className="sub">A living record. Added to when something becomes true.</div>
         </div>
         <div className="right">
           <div className="label">Last edited</div>

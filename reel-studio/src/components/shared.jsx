@@ -3,14 +3,25 @@ import clsx from 'clsx';
 
 export { clsx };
 
+const TWEAKS_KEY = 'reel.tweaks.v1';
+
 // useTweaks hook
 export function useTweaks(defaults) {
-  const [values, setValues] = useState(defaults);
+  const [values, setValues] = useState(() => {
+    try {
+      const saved = localStorage.getItem(TWEAKS_KEY);
+      if (saved) return { ...defaults, ...JSON.parse(saved) };
+    } catch {}
+    return defaults;
+  });
   const setTweak = useCallback((keyOrEdits, val) => {
     const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
       ? keyOrEdits : { [keyOrEdits]: val };
-    setValues((prev) => ({ ...prev, ...edits }));
-    // post to parent in case embedded in iframe context
+    setValues((prev) => {
+      const next = { ...prev, ...edits };
+      try { localStorage.setItem(TWEAKS_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
     try { window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*'); } catch (e) {}
     window.dispatchEvent(new CustomEvent('tweakchange', { detail: edits }));
   }, []);

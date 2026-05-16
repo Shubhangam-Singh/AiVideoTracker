@@ -327,11 +327,20 @@ function AttachMenu({ onClose, onVideo, onPrompt, onDecision }) {
   );
 }
 
-function Composer({ onSend, threadTitle }) {
+function Composer({ onSend, threadTitle, threadId }) {
   const [text, setText] = useState('');
   const [attachOpen, setAttachOpen] = useState(false);
   const [decisionMode, setDecisionMode] = useState(false);
   const taRef = useRef(null);
+
+  useEffect(() => {
+    try { setText(localStorage.getItem('reel.chat.draft.' + threadId) || ''); } catch {}
+    setDecisionMode(false);
+  }, [threadId]);
+
+  useEffect(() => {
+    try { localStorage.setItem('reel.chat.draft.' + threadId, text); } catch {}
+  }, [text, threadId]);
 
   const autosize = () => {
     if (!taRef.current) return;
@@ -348,6 +357,7 @@ function Composer({ onSend, threadTitle }) {
     } else {
       onSend({ kind: 'text', text: t });
     }
+    try { localStorage.removeItem('reel.chat.draft.' + threadId); } catch {}
     setText('');
     setDecisionMode(false);
   };
@@ -443,14 +453,127 @@ function Composer({ onSend, threadTitle }) {
   );
 }
 
-const CANNED_REPLIES = [
-  "mm. let me think.",
-  "agreed. let's do it.",
-  "send me a frame when you have one.",
-  "ok. i'll start there.",
-  "makes sense. what's the next step?",
-  "interesting. give me a minute.",
-];
+function localReply(userText) {
+  const t = userText.toLowerCase().trim();
+
+  if (t.includes('?')) {
+    const pool = [
+      "let me think about that.",
+      "good question. give me a minute.",
+      "i'm not sure yet — what's your gut saying?",
+      "hmm. let's revisit tomorrow with fresh eyes.",
+      "not certain, but i have a direction.",
+    ];
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  if (t.split(/\s+/).length <= 3 && /\b(hey|hi|hello|yo|ok|okay|sure|yep|yes|no|nope)\b/.test(t)) {
+    return ["yeah.", "ok.", "mm.", "with you.", "hey."][Math.floor(Math.random() * 5)];
+  }
+
+  if (/\b(shoot|filming|location|camera|shot|tripod|frame)\b/.test(t)) {
+    const pool = [
+      "let's lock the location first. what time works?",
+      "golden hour would cut the editing time down.",
+      "that angle works. add the wide opener before it?",
+      "sounds right. should we storyboard tonight?",
+    ];
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  if (/\b(edit|cut|color|grade|grading|trim|splice)\b/.test(t)) {
+    const pool = [
+      "i'll look at the rough tonight. leave color for tomorrow.",
+      "pacing feels long in the middle. trim from the 8s mark.",
+      "warm it slightly. not full orange.",
+      "let me take a pass first, then you adjust.",
+    ];
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  if (/\b(idea|concept|thinking|maybe|what if|imagine)\b/.test(t)) {
+    const pool = [
+      "interesting. give me a minute to picture it.",
+      "that could work. what's the hook in the first two seconds?",
+      "i like it. write it down before we lose it.",
+      "send me a reference if you find one.",
+    ];
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  if (/\b(script|hook|narration|caption|voiceover|words)\b/.test(t)) {
+    const pool = [
+      "the hook is the hardest part. read it out loud once.",
+      "fewer words. the frame says more anyway.",
+      "keep the narration under 12 seconds.",
+      "send me a draft when you have one.",
+    ];
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  if (/\b(post|upload|publish|schedule|release|go live)\b/.test(t)) {
+    const pool = [
+      "tuesday evening. 7 pm usually lands well.",
+      "let's not rush. one more day to sit with it.",
+      "thumbnail first, then we go.",
+      "both platforms at the same time?",
+    ];
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  if (/\b(tomorrow|tonight|today|this week|later|soon)\b/.test(t)) {
+    const pool = [
+      "i'll be around. send the file when it's ready.",
+      "let's aim for 4 pm so we have buffer.",
+      "message me when you start.",
+      "i'm blocking time tomorrow afternoon.",
+    ];
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  if (/\b(good|great|amazing|love|perfect|nice|beautiful|wow)\b/.test(t)) {
+    return ["yes. let's keep that energy.", "agreed. what's next?", "glad we got there.", "ok good. moving on."][Math.floor(Math.random() * 4)];
+  }
+
+  if (/\b(ai|prompt|picsart|gemini|tool|generate|model)\b/.test(t)) {
+    const pool = [
+      "try the PicsArt Flow batch. sometimes it surprises you.",
+      "the gemini pass is faster for rough work.",
+      "keep the prompt short. one mood, one instruction.",
+      "let's test two versions and compare.",
+    ];
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  if (/\b(problem|issue|broken|stuck|wrong|fail)\b/.test(t)) {
+    const pool = [
+      "what exactly broke? send me a screenshot.",
+      "restart and try again. if it's still there, we look together.",
+      "that's frustrating. give me 20 minutes.",
+      "i had that last week. try the other export setting.",
+    ];
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  if (Math.random() < 0.05) {
+    return ["what made you think of this now?", "is there a deadline we're working toward?", "have you seen any references for this?"][Math.floor(Math.random() * 3)];
+  }
+
+  const general = [
+    "mm. let me think.",
+    "agreed. let's do it.",
+    "send me a frame when you have one.",
+    "ok. i'll start there.",
+    "makes sense. what's the next step?",
+    "interesting. give me a minute.",
+    "yeah, that works.",
+    "let's not overthink it.",
+    "i like where this is going.",
+    "ok. same page.",
+    "noted. what's the priority?",
+  ];
+  return general[Math.floor(Math.random() * general.length)];
+}
 
 export default function Chat({ onMobileThreadOpenChange }) {
   const [threads, setThreads] = useState(() => {
@@ -510,7 +633,7 @@ export default function Chat({ onMobileThreadOpenChange }) {
       if (todayIdx >= 0) {
         days[todayIdx] = { ...days[todayIdx], messages: [...days[todayIdx].messages, stamped] };
       } else {
-        days.push({ label: 'Today — May 16', messages: [stamped] });
+        days.push({ label: 'Today — ' + new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), messages: [stamped] });
       }
       return { ...t, days };
     }));
@@ -518,59 +641,43 @@ export default function Chat({ onMobileThreadOpenChange }) {
 
   const triggerReply = async (threadId, userText) => {
     setTyping(true);
+    let replyText = '';
     try {
-      const thread = threads.find(t => t.id === threadId);
-      const recent = [];
-      thread.days.forEach(d => d.messages.forEach(m => {
-        if (!m.text || m.decision) return;
-        const who = m.from === 's1' ? 'Shubhangam' : 'Sanjeevani';
-        recent.push(`${who}: ${m.text}`);
-      }));
-      recent.push(`Shubhangam: ${userText}`);
-      const context = recent.slice(-10).join('\n');
-
+      const threadSnap = threads.find(t => t.id === threadId) || { days: [], title: '' };
       const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-      if (!apiKey) throw new Error('no api key');
 
-      const prompt = `You are Sanjeevani, co-creator of "Reel Studio" — a calm, indie short-form video studio you run with your friend Shubhangam. You make cinematic, AI-assisted shorts for YouTube + Instagram. The current thread is "${thread.title}". You are texting Shubhangam now.
-
-Style rules — very strict:
-- Reply in 1-2 short sentences. Casual lowercase. Warm but practical.
-- No emojis. No exclamation marks. No corporate or AI-assistant phrasing.
-- Sometimes propose a tiny concrete next step.
-- It's fine to push back gently or ask one short clarifying question.
-
-Recent thread:
-${context}
-
-Reply now as Sanjeevani (just the message text, no name prefix):`;
-
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5',
-          max_tokens: 120,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      });
-
-      if (!res.ok) throw new Error('api error');
-      const data = await res.json();
-      const reply = data.content?.[0]?.text || '';
-      const cleaned = reply.trim().replace(/^[Ss]anjeevani:\s*/, '').replace(/^"|"$/g, '').slice(0, 280);
-      if (cleaned) {
-        await new Promise(r => setTimeout(r, 400));
-        addMessage(threadId, { from: 's2', text: cleaned });
+      if (apiKey) {
+        try {
+          const recent = [];
+          threadSnap.days.forEach(d => d.messages.forEach(m => {
+            if (!m.text || m.decision) return;
+            recent.push(`${m.from === 's1' ? 'Shubhangam' : 'Sanjeevani'}: ${m.text}`);
+          }));
+          recent.push(`Shubhangam: ${userText}`);
+          const context = recent.slice(-10).join('\n');
+          const prompt = `You are Sanjeevani, co-creator of "Reel Studio" — a calm, indie short-form video studio you run with your friend Shubhangam. You make cinematic, AI-assisted shorts for YouTube + Instagram. The current thread is "${threadSnap.title}". You are texting Shubhangam now.\n\nStyle rules — very strict:\n- Reply in 1-2 short sentences. Casual lowercase. Warm but practical.\n- No emojis. No exclamation marks. No corporate or AI-assistant phrasing.\n- Sometimes propose a tiny concrete next step.\n- It's fine to push back gently or ask one short clarifying question.\n\nRecent thread:\n${context}\n\nReply now as Sanjeevani (just the message text, no name prefix):`;
+          const res = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': '2023-06-01',
+              'anthropic-dangerous-direct-browser-access': 'true',
+            },
+            body: JSON.stringify({ model: 'claude-haiku-4-5', max_tokens: 120, messages: [{ role: 'user', content: prompt }] }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            replyText = (data.content?.[0]?.text || '').trim().replace(/^[Ss]anjeevani:\s*/, '').replace(/^"|"$/g, '').slice(0, 280);
+          }
+        } catch {}
       }
-    } catch (e) {
-      const fallback = CANNED_REPLIES[Math.floor(Math.random() * CANNED_REPLIES.length)];
-      addMessage(threadId, { from: 's2', text: fallback });
+
+      if (!replyText) replyText = localReply(userText);
+
+      const delay = Math.min(1800, 350 + replyText.length * 18);
+      await new Promise(r => setTimeout(r, delay));
+      addMessage(threadId, { from: 's2', text: replyText });
     } finally {
       setTyping(false);
     }
@@ -668,7 +775,6 @@ Reply now as Sanjeevani (just the message text, no name prefix):`;
             <button
               className="back-btn"
               onClick={() => setMobileView('list')}
-              style={{ display: 'none', alignItems: 'center', gap: 4, padding: '6px 10px 6px 6px', fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.06em', color: 'var(--ink)', borderRadius: 999 }}
             >
               <span style={{ fontFamily: 'var(--serif)', fontSize: 18, lineHeight: 1 }}>‹</span>
             </button>
@@ -722,7 +828,7 @@ Reply now as Sanjeevani (just the message text, no name prefix):`;
             {typing && <TypingIndicator />}
           </div>
 
-          <Composer onSend={handleSend} threadTitle={active.title} />
+          <Composer onSend={handleSend} threadTitle={active.title} threadId={active.id} />
         </section>
       </div>
 

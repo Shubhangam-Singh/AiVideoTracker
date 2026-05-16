@@ -119,6 +119,7 @@ export function MobileNav({ active, onNav, onOpenMore }) {
             key={id}
             className={active === id ? 'active' : ''}
             onClick={() => onNav(id)}
+            aria-label={item.label}
           >
             <span className="mn-icon">{ICONS[id]}</span>
             {item.label}
@@ -128,6 +129,7 @@ export function MobileNav({ active, onNav, onOpenMore }) {
       <button
         className={!isPrimary ? 'active' : ''}
         onClick={onOpenMore}
+        aria-label="More"
       >
         <span className="mn-icon">{ICONS.more}</span>
         More
