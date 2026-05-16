@@ -1,0 +1,14 @@
+{
+  "name": "Reel Studio",
+  "short_name": "Reel Studio",
+  "description": "A calm, collaborative AI video tracking studio for two creators.",
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F7F5F0",
+  "theme_color": "#F7F5F0",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "categories": ["productivity", "video"]
+}
