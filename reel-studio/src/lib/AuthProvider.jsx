@@ -36,6 +36,8 @@ export function AuthProvider({ children }) {
     try {
       const u = await api.post('/api/auth/login', { username, password });
       setUser(u);
+      // Tell other hooks (e.g. useTweaks) that auth changed, so they can refetch
+      window.dispatchEvent(new CustomEvent('reel:authed', { detail: u }));
       return u;
     } catch (e) {
       setError(e.message || 'login failed');

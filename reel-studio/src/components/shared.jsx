@@ -14,20 +14,22 @@ export const TWEAK_DEFAULTS = {
   annotations: true,
 };
 
-// Server-backed tweaks. Loads on mount, debounces writes.
+// Server-backed tweaks. Loads on mount, debounces writes, refetches after login.
 export function useTweaks(defaults = TWEAK_DEFAULTS) {
   const [values, setValues] = useState(defaults);
   const saveTimer = useRef(null);
-  const loaded = useRef(false);
+  const defaultsRef = useRef(defaults);
 
+  // Load from server on mount AND when re-auth happens (so user-switch refreshes prefs)
   useEffect(() => {
     let cancelled = false;
-    api.get('/api/settings/me')
-      .then(s => { if (!cancelled) setValues({ ...defaults, ...(s || {}) }); })
-      .catch(() => {})
-      .finally(() => { loaded.current = true; });
-    return () => { cancelled = true; };
-    // eslint-disable-next-line
+    const load = () => api.get('/api/settings/me')
+      .then(s => { if (!cancelled) setValues({ ...defaultsRef.current, ...(s || {}) }); })
+      .catch(() => {});
+    load();
+    const onAuth = () => load();
+    window.addEventListener('reel:authed', onAuth);
+    return () => { cancelled = true; window.removeEventListener('reel:authed', onAuth); };
   }, []);
 
   const setTweak = useCallback((keyOrEdits, val) => {
@@ -45,16 +47,17 @@ export function useTweaks(defaults = TWEAK_DEFAULTS) {
 
   const reset = useCallback(async () => {
     try { await api.delete('/api/settings/me'); } catch {}
-    setValues(defaults);
-  }, [defaults]);
+    setValues(defaultsRef.current);
+  }, []);
 
   return [values, setTweak, reset];
 }
 
 export function Avatar({ who, size }) {
   const cls = who === 'ai' ? 'ai' : who === 's1' ? 's1' : 's2';
-  const style = size ? { width: size, height: size, fontSize: Math.max(10, size * 0.45) } : null;
-  const label = who === 'ai' ? '✦' : 'S';
+  const style = size ? { width: size, height: size, fontSize: Math.max(10, size * 0.42) } : null;
+  // Distinguishable initials so both users aren't just "S"
+  const label = who === 'ai' ? '✦' : who === 's1' ? 'Sh' : who === 's2' ? 'Sa' : (who || '?').slice(0, 2).toUpperCase();
   return <div className={clsx('avatar', cls)} style={style}>{label}</div>;
 }
 

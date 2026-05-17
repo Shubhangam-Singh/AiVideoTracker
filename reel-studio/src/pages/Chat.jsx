@@ -28,14 +28,14 @@ function previewText(m) {
 
 // ── thread list item ──────────────────────────────────────────────────────────
 
-function ThreadItem({ thread, active, lastMsg, currentUser, otherUserName, onClick, onDelete, online }) {
+function ThreadItem({ thread, active, lastMsg, currentUser, otherUserName, onClick, onDelete, online, unread }) {
   const fromLabel = !lastMsg ? ''
     : lastMsg.from_user === currentUser ? 'You: '
     : lastMsg.from_user === 'ai' ? 'Claude: '
     : (otherUserName ? otherUserName.split(' ')[0] + ': ' : '');
   return (
     <div className="thread-row" style={{ position: 'relative' }}>
-      <button onClick={onClick} className={clsx('thread-btn', active && 'on')}>
+      <button onClick={onClick} className={clsx('thread-btn', active && 'on', unread > 0 && 'has-unread')}>
         <div className="thread-avatar">
           {thread.linked_video_id ? <span>▶</span> : <span>{thread.title.slice(0, 1).toUpperCase()}</span>}
           {online && <span className="thread-presence" />}
@@ -45,7 +45,12 @@ function ThreadItem({ thread, active, lastMsg, currentUser, otherUserName, onCli
             <div className="thread-title">{thread.title}{thread.pinned ? ' · ◆' : ''}</div>
             <div className="thread-time">{lastMsg ? fmtTime(lastMsg.created_at) : ''}</div>
           </div>
-          <div className="thread-preview">{fromLabel}{previewText(lastMsg)}</div>
+          <div className="thread-preview">
+            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {fromLabel}{previewText(lastMsg)}
+            </span>
+            {unread > 0 && <span className="thread-unread">{unread}</span>}
+          </div>
         </div>
       </button>
       <button className="thread-delete-btn" onClick={(e) => { e.stopPropagation(); onDelete(); }} title="Delete thread">×</button>
@@ -445,7 +450,7 @@ export default function Chat({ onMobileThreadOpenChange }) {
   const otherName = otherUser === 's1' ? 'Shubhangam' : 'Sanjeevani';
   const currentName = user.name;
 
-  const { data: threads, setData: setThreads, refetch: refetchThreads } = useResource('/api/threads');
+  const { data: threads, setData: setThreads } = useResource('/api/threads');
   const { data: videos } = useResource('/api/videos');
   const { data: prompts } = useResource('/api/prompts');
   const { data: allUsers } = useResource('/api/auth/users');
@@ -454,6 +459,7 @@ export default function Chat({ onMobileThreadOpenChange }) {
   const [online, setOnline] = useState({});
   const [mobileView, setMobileView] = useState('list');
   const [lastMessages, setLastMessages] = useState({}); // threadId -> last msg
+  const [unread, setUnread] = useState({}); // threadId -> count of unseen messages
 
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches);
@@ -479,6 +485,14 @@ export default function Chat({ onMobileThreadOpenChange }) {
     if (!activeId && threads && threads.length > 0) setActiveId(threads[0].id);
   }, [threads, activeId]);
 
+  // Clear unread when opening a thread
+  useEffect(() => {
+    if (activeId && unread[activeId]) {
+      setUnread(prev => { const n = { ...prev }; delete n[activeId]; return n; });
+    }
+    // eslint-disable-next-line
+  }, [activeId]);
+
   // Subscribe to socket events for thread list updates + presence
   useEffect(() => {
     const unsub = socket.subscribe((ev) => {
@@ -490,6 +504,10 @@ export default function Chat({ onMobileThreadOpenChange }) {
         setOnline(prev => ({ ...prev, [ev.userId]: ev.online }));
       } else if (ev.type === 'message.created') {
         setLastMessages(prev => ({ ...prev, [ev.threadId]: ev.message }));
+        // Bump unread counter unless: I sent it, or I'm viewing that thread
+        if (ev.message.from_user !== currentUser && ev.threadId !== activeId) {
+          setUnread(prev => ({ ...prev, [ev.threadId]: (prev[ev.threadId] || 0) + 1 }));
+        }
       } else if (ev.type === 'thread.created') {
         setThreads(prev => {
           if ((prev || []).some(t => t.id === ev.thread.id)) return prev;
@@ -574,7 +592,8 @@ export default function Chat({ onMobileThreadOpenChange }) {
                 active={t.id === activeId}
                 currentUser={currentUser}
                 otherUserName={otherName}
-                online={t.linked_video_id ? online[otherUser] : online[otherUser]}
+                online={online[otherUser]}
+                unread={unread[t.id] || 0}
                 onClick={() => { setActiveId(t.id); if (isMobile) setMobileView('thread'); }}
                 onDelete={() => { if (confirm(`Delete thread "${t.title}"?`)) deleteThread(t); }}
               />

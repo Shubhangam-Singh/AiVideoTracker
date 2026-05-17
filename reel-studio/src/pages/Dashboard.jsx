@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import clsx from 'clsx';
 import { STATUS_TO_DOT, STATUS_TO_PILL } from '../data/index.js';
 import { SectionHead, Pill, AvatarStack } from '../components/shared.jsx';
@@ -11,6 +12,8 @@ export default function Dashboard({ onNav }) {
   const { data: tasks, setData: setTasks } = useResource('/api/tasks');
   const { data: prompts } = useResource('/api/prompts');
   const { data: tools } = useResource('/api/tools');
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState('');
 
   const v = videos || []; const t = tasks || []; const p = prompts || []; const tl = tools || [];
 
@@ -27,6 +30,16 @@ export default function Dashboard({ onNav }) {
   const onToggleTask = async (task) => {
     setTasks(prev => (prev || []).map(x => x.id === task.id ? { ...x, done: !x.done } : x));
     try { await api.patch('/api/tasks/' + task.id, { done: !task.done }); } catch {}
+  };
+
+  const onAddTask = async () => {
+    const label = draft.trim();
+    if (!label) { setAdding(false); setDraft(''); return; }
+    try {
+      const created = await api.post('/api/tasks', { label, who: user?.id || 's1', due: 'Today' });
+      setTasks(prev => [...(prev || []), created]);
+    } catch {}
+    setDraft(''); setAdding(false);
   };
 
   return (
@@ -103,10 +116,41 @@ export default function Dashboard({ onNav }) {
                 <div className="t-link">{x.video}</div>
               </div>
             ))}
-            {todayTasks.length === 0 && (
+            {todayTasks.length === 0 && !adding && (
               <div style={{ padding: 24, textAlign: 'center', fontFamily: 'var(--serif)', fontStyle: 'italic', color: 'var(--pencil)' }}>
-                Nothing on the list — add one on the Tasks page.
+                Nothing on the list — add one below.
               </div>
+            )}
+            {adding && (
+              <div style={{ padding: '12px 4px', display: 'flex', gap: 8, alignItems: 'center', borderBottom: '0.5px solid var(--hair)' }}>
+                <input
+                  autoFocus
+                  value={draft}
+                  onChange={e => setDraft(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') onAddTask();
+                    if (e.key === 'Escape') { setAdding(false); setDraft(''); }
+                  }}
+                  className="settings-input"
+                  placeholder="Quick task for today…"
+                  style={{ flex: 1, fontSize: 13, padding: '8px 10px' }}
+                />
+                <button className="settings-primary" style={{ fontSize: 11, padding: '6px 12px' }} onClick={onAddTask}>Add</button>
+                <button className="settings-secondary" style={{ fontSize: 11, padding: '6px 12px' }} onClick={() => { setAdding(false); setDraft(''); }}>×</button>
+              </div>
+            )}
+            {!adding && (
+              <button
+                onClick={() => setAdding(true)}
+                style={{
+                  marginTop: 10, padding: '10px 14px',
+                  fontFamily: 'var(--mono)', fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase',
+                  color: 'var(--pencil)', border: '0.5px dashed var(--hair-strong)', borderRadius: 4,
+                  textAlign: 'center', width: '100%',
+                }}
+              >
+                + Quick add task
+              </button>
             )}
           </div>
         </div>

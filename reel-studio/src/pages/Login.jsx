@@ -3,7 +3,7 @@ import { useAuth } from '../lib/AuthProvider.jsx';
 
 export default function Login() {
   const { login, error, setError } = useAuth();
-  const [username, setUsername] = useState('shubhangam');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
 

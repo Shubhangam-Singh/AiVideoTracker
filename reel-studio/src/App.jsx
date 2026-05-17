@@ -35,7 +35,18 @@ const accentMap = {
 function Shell() {
   const { user, loading, logout } = useAuth();
   const [tweaks, setTweak, resetTweaks] = useTweaks(TWEAK_DEFAULTS);
-  const [active, setActive] = useState(() => localStorage.getItem('reel.page') || 'dashboard');
+  const [active, setActive] = useState(() => {
+    // Honor ?page=X from URL (used by OAuth callbacks), else localStorage, else dashboard
+    try {
+      const p = new URLSearchParams(window.location.search).get('page');
+      if (p) {
+        // Strip query string so refresh doesn't keep snapping back
+        window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+        return p;
+      }
+    } catch {}
+    return localStorage.getItem('reel.page') || 'dashboard';
+  });
   const [moreOpen, setMoreOpen] = useState(false);
   const [chatThreadOpen, setChatThreadOpen] = useState(false);
 

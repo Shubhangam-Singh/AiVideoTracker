@@ -642,12 +642,19 @@ export default function Analytics({ tweaks }) {
 
       <SectionHead num="A4" title="Per-reel breakdown" sub="every published piece, both platforms"
         right={<a style={{ cursor: 'pointer' }} onClick={() => {
-          const rows = videos.map(v => `"${v.title}","${v.published}",${v.yt?.views||0},${v.ig?.views||0},${v.yt?.likes||0},${v.ig?.likes||0}`);
-          const csv = ['title,published,yt_views,ig_views,yt_likes,ig_likes', ...rows].join('\n');
-          const blob = new Blob([csv], { type: 'text/csv' });
+          const q = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
+          const rows = videos.map(v => [
+            q(v.title), q(v.published),
+            v.yt?.views || 0, v.ig?.views || 0,
+            v.yt?.likes || 0, v.ig?.likes || 0,
+            v.yt?.comments || 0, v.ig?.comments || 0,
+          ].join(','));
+          const csv = ['title,published,yt_views,ig_views,yt_likes,ig_likes,yt_comments,ig_comments', ...rows].join('\n');
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
-          a.href = url; a.download = 'reelstudio-analytics.csv'; a.click();
+          a.href = url; a.download = `reelstudio-analytics-${new Date().toISOString().split('T')[0]}.csv`;
+          a.click();
           URL.revokeObjectURL(url);
         }}>Export CSV →</a>}
       />
