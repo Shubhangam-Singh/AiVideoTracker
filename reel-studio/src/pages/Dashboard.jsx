@@ -2,7 +2,10 @@ import clsx from 'clsx';
 import { VIDEOS, TOOLS, PROMPTS, STATUS_TO_DOT, STATUS_TO_PILL } from '../data/index.js';
 import { SectionHead, Pill, AvatarStack } from '../components/shared.jsx';
 
-export default function Dashboard({ tasks, onToggleTask, onNav }) {
+export default function Dashboard({ tasks, onToggleTask, onNav, currentUser }) {
+  const userName = currentUser === 's2' ? 'Sanjeevani' : 'Shubhangam';
+  const hour = new Date().getHours();
+  const timeGreet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const inProgress = VIDEOS.filter(v => v.stage === 'editing' || v.stage === 'generating').length;
   const toolsActive = TOOLS.filter(t => t.status === 'active').length;
   const dueToday = tasks.filter(t => !t.done && t.due === 'Today').length;
@@ -16,7 +19,7 @@ export default function Dashboard({ tasks, onToggleTask, onNav }) {
       <div className="greeting">
         <div>
           <div className="eyebrow" style={{ marginBottom: 14 }}>[ 01 ] &nbsp; Dashboard &nbsp;— &nbsp; today</div>
-          <h1>Good evening, <span style={{ fontStyle: 'italic' }}>Shubhangam.</span></h1>
+          <h1>{timeGreet}, <span style={{ fontStyle: 'italic' }}>{userName}.</span></h1>
           <div className="sub">{VIDEOS.filter(v => v.stage !== 'done').length} videos in pipeline &nbsp;·&nbsp; {dueToday} task{dueToday === 1 ? '' : 's'} due today &nbsp;·&nbsp; the studio is quiet.</div>
         </div>
         <div className="right">

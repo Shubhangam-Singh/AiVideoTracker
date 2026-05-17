@@ -300,7 +300,7 @@ function PerReelGrid({ ytColor, igColor }) {
 
               {isOpen && (
                 <div style={{ padding: '18px 22px 22px', background: 'var(--surface)', borderTop: '0.5px solid var(--hair)' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                  <div className="analytics-detail-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
                     <div>
                       <div className="eyebrow" style={{ marginBottom: 8 }}>retention</div>
                       <div className="ret-scroll">

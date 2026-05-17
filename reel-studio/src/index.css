@@ -522,6 +522,69 @@ body {
 
 /* Chat back button: hidden by default, shown on mobile via media query */
 .chat-conv-header .back-btn { display: none; }
+
+/* Login screen */
+.login-choice-btn {
+  display: flex; align-items: center; gap: 18px;
+  width: 100%; padding: 20px 22px;
+  border: 0.5px solid var(--hair-strong);
+  border-radius: 8px;
+  background: var(--paper);
+  cursor: pointer;
+  transition: background 180ms, border-color 180ms;
+  text-align: left;
+}
+.login-choice-btn:hover { background: var(--surface); border-color: var(--pencil); }
+.login-choice-btn .login-avatar { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--serif); font-size: 20px; color: var(--paper); flex: none; }
+.login-choice-btn .login-avatar.s1 { background: var(--terracotta); }
+.login-choice-btn .login-avatar.s2 { background: var(--sage); }
+
+/* Task board add/delete */
+.task-delete-btn {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: var(--pencil); opacity: 0;
+  transition: opacity 160ms, background 160ms;
+}
+.tcard:hover .task-delete-btn { opacity: 0.5; }
+.task-delete-btn:hover { opacity: 1 !important; background: var(--surface-2); color: var(--ink); }
+.tcard-add { padding: 12px 14px; background: var(--surface); border-radius: 6px; border: 0.5px dashed var(--pencil-soft); }
+.task-add-input {
+  width: 100%; background: transparent; border: 0; outline: 0;
+  font-family: var(--serif); font-size: 16px; color: var(--ink);
+  padding: 4px 0;
+  border-bottom: 0.5px solid var(--hair-strong);
+}
+.task-add-input::placeholder { color: var(--pencil); }
+.task-add-ok {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+  background: var(--ink); color: var(--paper);
+  padding: 7px 14px; border-radius: 4px;
+  transition: opacity 160ms;
+}
+.task-add-ok:hover { opacity: 0.8; }
+.task-add-cancel { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--pencil); padding: 7px 10px; }
+.task-add-btn {
+  display: block; width: 100%; text-align: left;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--pencil); padding: 14px 2px;
+  border-top: 0.5px solid var(--hair);
+  margin-top: 8px;
+  transition: color 160ms;
+}
+.task-add-btn:hover { color: var(--ink); }
+
+/* Chat thread delete button */
+.thread-delete-btn {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: var(--pencil); opacity: 0;
+  transition: opacity 160ms, background 160ms;
+}
+.thread-item:hover .thread-delete-btn { opacity: 0.45; }
+.thread-delete-btn:hover { opacity: 1 !important; background: var(--surface-2); }
 button, a, .nav-item, .filter, .pill, .check, .task, .prow, .kcard, .tcard, .vault-card, .prompt-card, .tool-card {
   -webkit-tap-highlight-color: transparent;
 }
@@ -701,9 +764,15 @@ button, a, .nav-item, .filter, .pill, .check, .task, .prow, .kcard, .tcard, .vau
   /* Analytics: stack YT/IG cards to 1 col on mobile */
   .analytics-platform-inner { grid-template-columns: 1fr !important; }
 
+  /* Analytics detail grid (retention + per-platform avg): stack on mobile */
+  .analytics-detail-grid { grid-template-columns: 1fr !important; }
+
   /* Retention curve: scroll sideways if wider than card */
   .ret-scroll { overflow-x: auto; scrollbar-width: none; }
   .ret-scroll::-webkit-scrollbar { display: none; }
+
+  /* Task delete always slightly visible on mobile (no hover) */
+  .task-delete-btn { opacity: 0.4; }
 
   /* Donut: shrink on mobile */
   .donut-svg { width: 130px !important; height: 130px !important; }

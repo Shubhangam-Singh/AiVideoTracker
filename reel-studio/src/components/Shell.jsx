@@ -138,7 +138,7 @@ export function MobileNav({ active, onNav, onOpenMore }) {
   );
 }
 
-export function MoreSheet({ active, onNav, onClose }) {
+export function MoreSheet({ active, onNav, onClose, onLogout }) {
   useEffect(() => {
     const onEsc = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onEsc);
@@ -163,6 +163,17 @@ export function MoreSheet({ active, onNav, onClose }) {
             <span className="ms-meta">{n.meta}</span>
           </button>
         ))}
+        {onLogout && (
+          <button
+            className="more-sheet-row"
+            onClick={() => { onLogout(); onClose(); }}
+            style={{ color: 'var(--pencil)', fontStyle: 'italic', fontSize: 15 }}
+          >
+            <span className="ms-dot" />
+            <span style={{ width: 20, height: 20 }} />
+            Switch user
+          </button>
+        )}
         <button
           className="more-sheet-row"
           onClick={onClose}
