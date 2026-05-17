@@ -1579,5 +1579,136 @@ button, a, .nav-item, .filter, .pill, .check, .task, .prow, .kcard, .tcard, .vau
   .chat-back { display: flex; }
   .chat-foot { display: none; }
   .msg-bubble-wrap { max-width: 85%; }
+  .chat-greeting { display: none; }
 }
+
+/* ── Mobile-first responsive overrides ──────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  /* Settings: stack rows on narrow screens */
+  .settings-card { padding: 0 !important; }
+  .settings-row {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 10px;
+    padding: 14px 18px !important;
+  }
+  .settings-row > *:last-child { align-self: flex-start; }
+  .settings-segment { flex-wrap: wrap; }
+
+  /* Modal: full-width on small screens */
+  .modal { max-width: calc(100vw - 32px); max-height: 85vh; }
+  .modal-wide { max-width: calc(100vw - 24px); }
+  .modal-body { padding: 14px 16px; }
+  .modal-head { padding: 14px 16px 12px; }
+  .modal-foot { padding: 10px 16px 14px; }
+
+  /* Form grid: 1 column on mobile */
+  .form-grid { grid-template-columns: 1fr !important; }
+  .form-field[style*="gridColumn"] { grid-column: 1 !important; }
+
+  /* Pipeline kanban: horizontal scroll */
+  .kanban {
+    display: flex;
+    overflow-x: auto;
+    gap: 14px;
+    padding-bottom: 14px;
+    margin: 0 -18px;
+    padding-left: 18px;
+    padding-right: 18px;
+    scrollbar-width: none;
+    scroll-snap-type: x mandatory;
+  }
+  .kanban::-webkit-scrollbar { display: none; }
+  .kcol {
+    flex: 0 0 75vw;
+    scroll-snap-align: start;
+    min-width: 200px;
+  }
+
+  /* Dashboard: two-col stack */
+  .two-col { grid-template-columns: 1fr !important; gap: 24px; }
+
+  /* Stats grid: 2 cols on mobile */
+  .stats { grid-template-columns: 1fr 1fr !important; gap: 12px; }
+
+  /* Pipeline list rows: hide some columns */
+  .prow { grid-template-columns: 28px 1fr auto; }
+  .prow .tool, .prow .assignees { display: none; }
+
+  /* Prompt grid: 1 col on mobile */
+  .prompt-grid { grid-template-columns: 1fr !important; }
+
+  /* Analytics platform totals: stack on mobile */
+  .analytics-platform-totals { grid-template-columns: 1fr !important; }
+  .analytics-engagement-row { grid-template-columns: 1fr !important; }
+
+  /* Analytics toolbar: wrap */
+  .analytics-toolbar { flex-wrap: wrap; row-gap: 8px; }
+
+  /* Targets grid: 1 col on mobile */
+  .targets-grid { grid-template-columns: 1fr !important; }
+
+  /* Per-reel grid: 1 col on mobile */
+  .analytics-perreel-grid { grid-template-columns: 1fr !important; }
+
+  /* Per-reel inner: 1 col */
+  .analytics-platform-inner { grid-template-columns: 1fr !important; }
+
+  /* Greeting: smaller heading */
+  .greeting { flex-direction: column !important; gap: 16px; }
+  .greeting .right { align-self: flex-start; }
+  .greeting h1 { font-size: 34px !important; }
+
+  /* Section head: wrap */
+  .section-head { flex-wrap: wrap; gap: 8px 14px; margin: 36px 0 16px; }
+  .section-head .right { margin-left: 0; width: 100%; }
+
+  /* Platform connection cards: stack */
+  .platform-connections-grid { grid-template-columns: 1fr !important; }
+
+  /* Task edit btn: always visible on touch */
+  .task-edit-btn { opacity: 1 !important; }
+
+  /* kcard action row: full width select */
+  .kcard-stage { font-size: 10px; padding: 4px 6px; }
+
+  /* Topbar scrollable title on narrow screens */
+  .topbar-title { font-size: 22px !important; }
+}
+
+@media (max-width: 420px) {
+  .stats { grid-template-columns: 1fr !important; }
+  .stat .num { font-size: 36px; }
+  .greeting h1 { font-size: 28px !important; }
+  .attach-sheet { border-radius: 14px 14px 0 0; }
+}
+
+/* thread delete button */
+.thread-delete-btn {
+  position: absolute;
+  right: 8px; top: 50%;
+  transform: translateY(-50%);
+  width: 28px; height: 28px; border-radius: 50%;
+  font-size: 18px; color: var(--pencil);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0;
+  transition: opacity 160ms, background 160ms;
+  z-index: 2;
+}
+.thread-row:hover .thread-delete-btn { opacity: 1; }
+.thread-delete-btn:hover { background: var(--surface); color: var(--ink); }
+@media (max-width: 768px) {
+  .thread-delete-btn { opacity: 0.5; }
+}
+
+/* chat-empty state */
+.chat-empty {
+  flex: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* analytics stat row: wrap on narrow cards */
+.analytics-stat-row { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: baseline; }
+
 

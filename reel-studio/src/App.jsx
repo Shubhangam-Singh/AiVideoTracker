@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import clsx from 'clsx';
 import { useTweaks, TWEAK_DEFAULTS } from './components/shared.jsx';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 import {
   Sidebar, Topbar, Ledger, MobileTopbar, MobileNav, MoreSheet,
 } from './components/Shell.jsx';
@@ -102,7 +103,7 @@ function Shell() {
           backLabel="Threads"
         />
         <div className="page" key={active}>
-          {pageEl}
+          <ErrorBoundary key={active}>{pageEl}</ErrorBoundary>
         </div>
         <Ledger active={active} />
       </main>

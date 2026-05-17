@@ -9,6 +9,10 @@ async function request(method, url, body) {
   let data = null;
   try { data = await res.json(); } catch {}
   if (!res.ok) {
+    // Global 401 handler — clears the session in AuthProvider
+    if (res.status === 401 && !url.includes('/api/auth/')) {
+      window.dispatchEvent(new CustomEvent('reel:unauthorized'));
+    }
     const err = new Error((data && data.error) || `${method} ${url} failed (${res.status})`);
     err.status = res.status;
     err.data = data;

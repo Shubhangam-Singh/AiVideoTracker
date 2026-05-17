@@ -20,6 +20,7 @@ import strategyRoutes from './routes/strategy.js';
 import threadRoutes from './routes/threads.js';
 import messageRoutes from './routes/messages.js';
 import settingsRoutes from './routes/settings.js';
+import analyticsRoutes from './routes/analytics.js';
 
 import SqliteStoreFactory from 'better-sqlite3-session-store';
 const SqliteStore = SqliteStoreFactory(session);
@@ -61,6 +62,7 @@ app.use('/api/strategy', strategyRoutes);
 app.use('/api/threads', threadRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, time: Date.now() }));
 

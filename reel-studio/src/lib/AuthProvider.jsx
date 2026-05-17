@@ -19,6 +19,13 @@ export function AuthProvider({ children }) {
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  // When any API call receives 401, force re-check (session expired)
+  useEffect(() => {
+    const onUnauth = () => setUser(null);
+    window.addEventListener('reel:unauthorized', onUnauth);
+    return () => window.removeEventListener('reel:unauthorized', onUnauth);
+  }, []);
+
   useEffect(() => {
     if (user) socket.start();
     else socket.stop();

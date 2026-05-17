@@ -32,7 +32,7 @@ function ThreadItem({ thread, active, lastMsg, currentUser, otherUserName, onCli
   const fromLabel = !lastMsg ? ''
     : lastMsg.from_user === currentUser ? 'You: '
     : lastMsg.from_user === 'ai' ? 'Claude: '
-    : (lastMsg.from_user === 's1' ? 'Shub: ' : 'San: ');
+    : (otherUserName ? otherUserName.split(' ')[0] + ': ' : '');
   return (
     <div className="thread-row" style={{ position: 'relative' }}>
       <button onClick={onClick} className={clsx('thread-btn', active && 'on')}>
@@ -164,7 +164,7 @@ function AttachSheet({ onClose, onPickVideo, onPickPrompt, onDecide, videos, pro
 
 // ── decisions modal ───────────────────────────────────────────────────────────
 
-function DecisionsModal({ decisions, onClose }) {
+function DecisionsModal({ decisions, onClose, fromName }) {
   return (
     <Modal title={`Decisions · ${decisions.length}`} onClose={onClose} wide>
       {decisions.length === 0 && (
@@ -176,7 +176,7 @@ function DecisionsModal({ decisions, onClose }) {
         <div key={d.id} className="msg-decision-pin" style={{ marginBottom: 12 }}>
           <div className="msg-decision-eyebrow">◆ Decision</div>
           <div className="msg-decision-text">{d.decision_text}</div>
-          <div className="msg-decision-meta">{d.from_user === 's1' ? 'Shubhangam' : 'Sanjeevani'} · {fmtTime(d.created_at)}</div>
+          <div className="msg-decision-meta">{fromName(d.from_user)} · {fmtTime(d.created_at)}</div>
         </div>
       ))}
     </Modal>
@@ -185,7 +185,7 @@ function DecisionsModal({ decisions, onClose }) {
 
 // ── conversation panel ────────────────────────────────────────────────────────
 
-function Conversation({ thread, currentUser, currentName, otherName, videos, prompts, online, onBack, onRenamed, onDeleted }) {
+function Conversation({ thread, currentUser, currentName, otherName, allUsers, videos, prompts, online, onBack, onRenamed, onDeleted }) {
   const { data: messages, setData: setMessages, refetch } = useResource(thread ? `/api/threads/${thread.id}/messages` : null);
   const [typingPeer, setTypingPeer] = useState(null);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -286,7 +286,12 @@ function Conversation({ thread, currentUser, currentName, otherName, videos, pro
     );
   }
 
-  const fromName = (u) => u === 'ai' ? 'Claude' : u === 's1' ? 'Shubhangam' : 'Sanjeevani';
+  const fromName = (u) => {
+    if (u === 'ai') return 'Claude';
+    if (u === currentUser) return currentName;
+    const found = (allUsers || []).find(x => x.id === u);
+    return found ? found.name : (otherName || u);
+  };
 
   return (
     <section className="chat-conv">
@@ -353,7 +358,7 @@ function Conversation({ thread, currentUser, currentName, otherName, videos, pro
 
       <ComposerWrapper threadId={thread.id} threadTitle={thread.title} videos={videos} prompts={prompts} onSend={sendMessage} onTyping={onTyping} />
 
-      {decisionsOpen && <DecisionsModal decisions={decisions} onClose={() => setDecisionsOpen(false)} />}
+      {decisionsOpen && <DecisionsModal decisions={decisions} onClose={() => setDecisionsOpen(false)} fromName={fromName} />}
     </section>
   );
 }
@@ -443,6 +448,7 @@ export default function Chat({ onMobileThreadOpenChange }) {
   const { data: threads, setData: setThreads, refetch: refetchThreads } = useResource('/api/threads');
   const { data: videos } = useResource('/api/videos');
   const { data: prompts } = useResource('/api/prompts');
+  const { data: allUsers } = useResource('/api/auth/users');
   const [activeId, setActiveId] = useState(null);
   const [query, setQuery] = useState('');
   const [online, setOnline] = useState({});
@@ -592,6 +598,7 @@ export default function Chat({ onMobileThreadOpenChange }) {
           currentUser={currentUser}
           currentName={currentName}
           otherName={otherName}
+          allUsers={allUsers}
           videos={videos}
           prompts={prompts}
           online={online[otherUser]}
