@@ -2,7 +2,12 @@ import { useEffect } from 'react';
 import clsx from 'clsx';
 import { NAV } from '../data/index.js';
 
-export function Sidebar({ active, onNav }) {
+const FULL_NAV = [
+  ...NAV,
+  { id: 'settings', label: 'Settings', meta: '10' },
+];
+
+export function Sidebar({ active, onNav, currentUser }) {
   return (
     <aside className="sidebar">
       <div className="logo">
@@ -12,7 +17,7 @@ export function Sidebar({ active, onNav }) {
       </div>
 
       <nav className="nav">
-        {NAV.map(item => (
+        {FULL_NAV.map(item => (
           <button
             key={item.id}
             className={clsx('nav-item', active === item.id && 'active')}
@@ -28,32 +33,31 @@ export function Sidebar({ active, onNav }) {
       <div className="sidebar-divider" />
 
       <div className="users">
-        <div style={{ fontFamily: 'var(--mono)', fontSize: 9.5, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--pencil)' }}>Two Hands</div>
-        <div className="user-row">
-          <div className="avatar s1">S</div>
-          <div className="name">Shubhangam</div>
-          <div className="status">on</div>
+        <div style={{ fontFamily: 'var(--mono)', fontSize: 9.5, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--pencil)' }}>
+          Signed in
         </div>
-        <div className="user-row">
-          <div className="avatar s2">S</div>
-          <div className="name">Sanjeevani</div>
-          <div className="status">on</div>
-        </div>
+        {currentUser && (
+          <div className="user-row">
+            <div className={`avatar ${currentUser.id}`}>S</div>
+            <div className="name">{currentUser.name}</div>
+            <div className="status">on</div>
+          </div>
+        )}
       </div>
     </aside>
   );
 }
 
-export function Topbar({ active }) {
-  const item = NAV.find(n => n.id === active);
+export function Topbar({ active, currentUser }) {
+  const item = FULL_NAV.find(n => n.id === active);
   return (
     <div className="topbar">
       <div className="crumbs">
         Reel Studio &nbsp;/&nbsp; <b>{item ? item.label : ''}</b>
       </div>
       <div className="right">
-        <div className="weather">Mumbai · 27°C · clear</div>
-        <div className="date">Saturday, May the 16th</div>
+        {currentUser && <div className="date">Hi, {currentUser.name.split(' ')[0]}.</div>}
+        <div className="weather">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>
       </div>
     </div>
   );
@@ -62,17 +66,17 @@ export function Topbar({ active }) {
 export function Ledger({ active }) {
   return (
     <div className="ledger">
-      <div>Reel Studio · v0.3 · saved 2 min ago</div>
+      <div>Reel Studio · v1.0 · live</div>
       <div className="dots">
-        {NAV.map(n => <span key={n.id} className={active === n.id ? 'on' : ''} />)}
+        {FULL_NAV.map(n => <span key={n.id} className={active === n.id ? 'on' : ''} />)}
       </div>
-      <div>Page {NAV.findIndex(n => n.id === active) + 1} / {NAV.length}</div>
+      <div>Page {Math.max(1, FULL_NAV.findIndex(n => n.id === active) + 1)} / {FULL_NAV.length}</div>
     </div>
   );
 }
 
 export function MobileTopbar({ active, onMenu, backLabel, onBack }) {
-  const item = NAV.find(n => n.id === active);
+  const item = FULL_NAV.find(n => n.id === active);
   return (
     <div className="mobile-topbar">
       {onBack ? (
@@ -86,8 +90,8 @@ export function MobileTopbar({ active, onMenu, backLabel, onBack }) {
         <div className="mt-sub">{item ? '[ ' + item.meta + ' ]' : ''}</div>
         <div className="mt-title" style={{ textAlign: onBack ? 'left' : 'right' }}>{item ? item.label : ''}</div>
       </div>
-      <button className="mt-action" onClick={onMenu} aria-label="Account">
-        <span style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: 0 }}>S·S</span>
+      <button className="mt-action" onClick={onMenu} aria-label="Menu">
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: 0 }}>···</span>
       </button>
     </div>
   );
@@ -104,16 +108,17 @@ export const ICONS = {
   tools: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"><path d="M14 4l6 6-3 3-2-2-4 4 2 2-3 3-6-6 3-3 2 2 4-4-2-2z"/></svg>,
   targets: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1"/></svg>,
   strategy: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"><path d="M5 4h12a1 1 0 0 1 1 1v15l-3-2-3 2-3-2-3 2-2-1V5a1 1 0 0 1 1-1z"/><path d="M9 9h6"/><path d="M9 13h4"/></svg>,
+  settings: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>,
 };
 
-const MOBILE_PRIMARY = ['dashboard', 'analytics', 'chat', 'pipeline'];
+const MOBILE_PRIMARY = ['dashboard', 'chat', 'pipeline', 'tasks'];
 
 export function MobileNav({ active, onNav, onOpenMore }) {
   const isPrimary = MOBILE_PRIMARY.includes(active);
   return (
     <div className="mobile-nav">
       {MOBILE_PRIMARY.map(id => {
-        const item = NAV.find(n => n.id === id);
+        const item = FULL_NAV.find(n => n.id === id);
         return (
           <button
             key={id}
@@ -150,8 +155,8 @@ export function MoreSheet({ active, onNav, onClose, onLogout }) {
       <div className="more-sheet-backdrop" onClick={onClose} />
       <div className="more-sheet" role="dialog" aria-label="More">
         <div className="more-sheet-handle" />
-        <div className="more-sheet-title">More · 5 sections</div>
-        {NAV.filter(n => !MOBILE_PRIMARY.includes(n.id)).map(n => (
+        <div className="more-sheet-title">More</div>
+        {FULL_NAV.filter(n => !MOBILE_PRIMARY.includes(n.id)).map(n => (
           <button
             key={n.id}
             className={clsx('more-sheet-row', active === n.id && 'active')}
@@ -167,11 +172,11 @@ export function MoreSheet({ active, onNav, onClose, onLogout }) {
           <button
             className="more-sheet-row"
             onClick={() => { onLogout(); onClose(); }}
-            style={{ color: 'var(--pencil)', fontStyle: 'italic', fontSize: 15 }}
+            style={{ color: 'var(--terracotta)' }}
           >
             <span className="ms-dot" />
             <span style={{ width: 20, height: 20 }} />
-            Switch user
+            Sign out
           </button>
         )}
         <button

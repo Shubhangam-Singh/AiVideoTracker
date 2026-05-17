@@ -1,237 +1,369 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
-import { CHAT_THREADS, VIDEOS, PROMPTS, STATUS_TO_DOT } from '../data/index.js';
-import { Avatar } from '../components/shared.jsx';
+import { Avatar, Modal } from '../components/shared.jsx';
+import { useResource } from '../lib/useResource.js';
+import { api } from '../lib/api.js';
+import { socket } from '../lib/socket.js';
+import { useAuth } from '../lib/AuthProvider.jsx';
 
-function flattenMessages(thread) {
-  const out = [];
-  thread.days.forEach(d => {
-    out.push({ kind: 'day', label: d.label });
-    d.messages.forEach(m => out.push({ kind: 'msg', ...m }));
-  });
-  return out;
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+function fmtTime(ts) {
+  return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+function fmtDay(ts) {
+  const d = new Date(ts); const today = new Date();
+  const diff = Math.round((today.setHours(0,0,0,0) - new Date(d).setHours(0,0,0,0)) / 86400000);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Yesterday';
+  if (diff < 7) return d.toLocaleDateString([], { weekday: 'long' });
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+function previewText(m) {
+  if (!m) return '';
+  if (m.decision) return '◆ ' + (m.decision_text || m.decisionText || 'decision');
+  if (m.attachment) return m.attachment.kind === 'video' ? '⏵ video reference' : m.attachment.kind === 'prompt' ? '✎ prompt' : '⊕ attachment';
+  return m.text;
 }
 
-function lastMessageOf(thread) {
-  const lastDay = thread.days[thread.days.length - 1];
-  if (!lastDay) return null;
-  return lastDay.messages[lastDay.messages.length - 1];
-}
+// ── thread list item ──────────────────────────────────────────────────────────
 
-function previewOf(msg) {
-  if (!msg) return '';
-  if (msg.decision) return '◆ Decision · ' + msg.decisionText;
-  if (msg.attachment) return msg.attachment.kind === 'video' ? '⏵ video reference' : msg.attachment.kind === 'prompt' ? '✎ prompt reference' : '⊕ attachment';
-  return msg.text;
-}
-
-function decisionsOf(thread) {
-  const out = [];
-  thread.days.forEach(d => d.messages.forEach(m => { if (m.decision) out.push(m); }));
-  return out;
-}
-
-function ThreadListItem({ thread, active, onClick, lastMsg, currentUser }) {
-  const preview = previewOf(lastMsg);
-  const fromPrefix = lastMsg
-    ? (lastMsg.from === currentUser ? 'You: ' : lastMsg.from === 's2' ? 'San: ' : 'Shub: ')
-    : '';
+function ThreadItem({ thread, active, lastMsg, currentUser, otherUserName, onClick, onDelete, online }) {
+  const fromLabel = !lastMsg ? ''
+    : lastMsg.from_user === currentUser ? 'You: '
+    : lastMsg.from_user === 'ai' ? 'Claude: '
+    : (lastMsg.from_user === 's1' ? 'Shub: ' : 'San: ');
   return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '36px 1fr auto',
-        gridTemplateRows: 'auto auto',
-        columnGap: 12, rowGap: 3,
-        padding: '14px 40px 14px 14px',
-        textAlign: 'left',
-        background: active ? 'var(--surface)' : 'transparent',
-        borderBottom: '0.5px solid var(--hair)',
-        cursor: 'pointer',
-        transition: 'background 160ms',
-        width: '100%',
-      }}
-    >
-      <div style={{ gridRow: '1 / span 2', display: 'flex', alignItems: 'center' }}>
-        {thread.linkedVideoId ? (
-          <div style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--serif)', fontSize: 15, color: 'var(--ink)', border: '0.5px solid var(--hair)' }}>▶</div>
-        ) : (
-          <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.06em', color: 'var(--ink)', border: '0.5px solid var(--hair)' }}>S·S</div>
-        )}
-      </div>
-      <div style={{ fontFamily: 'var(--serif)', fontSize: 16, lineHeight: 1.25, color: 'var(--ink)', fontWeight: 400 }}>
-        {thread.title}
-      </div>
-      <div style={{ fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--pencil)', letterSpacing: '0.06em', alignSelf: 'start' }}>
-        {lastMsg ? lastMsg.at : ''}
-      </div>
-      <div style={{ fontFamily: 'var(--sans)', fontSize: 12.5, color: 'var(--pencil)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', gridColumn: '2 / span 2' }}>
-        {fromPrefix}{preview}
-      </div>
-      {thread.pinned && (
-        <div style={{ position: 'absolute', top: 8, right: 36, fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--terracotta)', letterSpacing: '0.1em' }}>◆</div>
-      )}
-    </button>
-  );
-}
-
-function DateDivider({ label }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '22px 0 12px' }}>
-      <div style={{ flex: 1, height: 0, borderTop: '0.5px solid var(--hair)' }} />
-      <span style={{ fontFamily: 'var(--mono)', fontSize: 9.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--pencil)' }}>{label}</span>
-      <div style={{ flex: 1, height: 0, borderTop: '0.5px solid var(--hair)' }} />
-    </div>
-  );
-}
-
-function DecisionPin({ msg }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0' }}>
-      <div style={{ maxWidth: '78%', background: 'var(--paper)', border: '0.5px dashed var(--terracotta)', borderRadius: 6, padding: '10px 14px 11px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <div style={{ fontFamily: 'var(--mono)', fontSize: 9.5, letterSpacing: '0.18em', color: 'var(--terracotta)', textTransform: 'uppercase' }}>◆ Decision · agreed</div>
-        <div style={{ fontFamily: 'var(--serif)', fontSize: 16, fontStyle: 'italic', color: 'var(--ink)', lineHeight: 1.35 }}>{msg.decisionText}</div>
-        <div style={{ fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--pencil)', letterSpacing: '0.08em' }}>
-          by {msg.from === 's1' ? 'Shubhangam' : 'Sanjeevani'} · {msg.at}
+    <div className="thread-row" style={{ position: 'relative' }}>
+      <button onClick={onClick} className={clsx('thread-btn', active && 'on')}>
+        <div className="thread-avatar">
+          {thread.linked_video_id ? <span>▶</span> : <span>{thread.title.slice(0, 1).toUpperCase()}</span>}
+          {online && <span className="thread-presence" />}
         </div>
-      </div>
+        <div className="thread-body">
+          <div className="thread-row1">
+            <div className="thread-title">{thread.title}{thread.pinned ? ' · ◆' : ''}</div>
+            <div className="thread-time">{lastMsg ? fmtTime(lastMsg.created_at) : ''}</div>
+          </div>
+          <div className="thread-preview">{fromLabel}{previewText(lastMsg)}</div>
+        </div>
+      </button>
+      <button className="thread-delete-btn" onClick={(e) => { e.stopPropagation(); onDelete(); }} title="Delete thread">×</button>
     </div>
   );
 }
 
-function AttachmentCard({ attachment }) {
+// ── message bubble ────────────────────────────────────────────────────────────
+
+function AttachmentCard({ attachment, videos, prompts }) {
+  if (!attachment) return null;
   if (attachment.kind === 'video') {
-    const v = VIDEOS.find(x => x.id === attachment.id);
-    if (!v) return null;
+    const v = (videos || []).find(x => x.id === attachment.id);
     return (
-      <div style={{ marginTop: 4, border: '0.5px solid var(--hair)', borderRadius: 5, background: 'var(--paper)', display: 'grid', gridTemplateColumns: '52px 1fr', gap: 12, padding: 8, minWidth: 240 }}>
-        <div style={{ background: 'var(--surface-2)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--serif)', fontSize: 18, color: 'var(--ink)' }}>▶</div>
-        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0 }}>
-          <div style={{ fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.14em', color: 'var(--pencil)', textTransform: 'uppercase' }}>video</div>
-          <div style={{ fontFamily: 'var(--serif)', fontSize: 15, lineHeight: 1.2, color: 'var(--ink)' }}>{v.title}{v.part ? ' — ' + v.part : ''}</div>
-          <div style={{ fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--pencil)', letterSpacing: '0.06em', marginTop: 2 }}>
-            <span className={`status-dot ${STATUS_TO_DOT[v.status]}`} style={{ marginRight: 6, verticalAlign: 'middle' }} />
-            {v.status} · {v.tool}
-          </div>
+      <div className="attach-card">
+        <div className="attach-icon">▶</div>
+        <div>
+          <div className="attach-eyebrow">video</div>
+          <div className="attach-title">{v ? `${v.title}${v.part ? ' — ' + v.part : ''}` : attachment.id}</div>
+          {v && <div className="attach-meta">{v.status} · {v.tool}</div>}
         </div>
       </div>
     );
   }
   if (attachment.kind === 'prompt') {
-    const p = PROMPTS.find(x => x.id === attachment.id);
-    if (!p) return null;
+    const p = (prompts || []).find(x => x.id === attachment.id);
     return (
-      <div style={{ marginTop: 4, border: '0.5px solid var(--hair)', borderRadius: 5, background: 'var(--paper)', padding: '10px 12px', minWidth: 240, maxWidth: 320 }}>
-        <div style={{ fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.14em', color: 'var(--pencil)', textTransform: 'uppercase', marginBottom: 4 }}>prompt · {p.tool.toLowerCase()}</div>
-        <div style={{ fontFamily: 'var(--serif)', fontSize: 15, lineHeight: 1.2, color: 'var(--ink)', marginBottom: 4 }}>{p.title}</div>
-        <div style={{ fontFamily: 'var(--sans)', fontSize: 12, color: '#4a4944', lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.body}</div>
+      <div className="attach-card">
+        <div className="attach-icon">✎</div>
+        <div>
+          <div className="attach-eyebrow">prompt · {p?.tool?.toLowerCase() || ''}</div>
+          <div className="attach-title">{p?.title || attachment.id}</div>
+          {p && <div className="attach-body">{p.body}</div>}
+        </div>
       </div>
     );
   }
   return null;
 }
 
-function Bubble({ msg, mine }) {
-  const bg = mine ? 'var(--sage-soft)' : 'var(--surface)';
-  const align = mine ? 'flex-end' : 'flex-start';
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: align, gap: 4, maxWidth: '72%', alignSelf: align }}>
-      <div style={{ background: bg, borderRadius: mine ? '18px 18px 4px 18px' : '18px 18px 18px 4px', padding: msg.text ? '10px 14px' : '8px', fontFamily: 'var(--sans)', fontSize: 14, lineHeight: 1.5, color: 'var(--ink)', wordBreak: 'break-word', whiteSpace: 'pre-wrap', border: '0.5px solid var(--hair)' }}>
-        {msg.text && <div>{msg.text}</div>}
-        {msg.attachment && <AttachmentCard attachment={msg.attachment} />}
+function MessageRow({ msg, mine, isAi, videos, prompts, showAvatar, fromName, onDelete }) {
+  if (msg.decision) {
+    return (
+      <div className="msg-decision">
+        <div className="msg-decision-pin">
+          <div className="msg-decision-eyebrow">◆ Decision</div>
+          <div className="msg-decision-text">{msg.decision_text || msg.decisionText}</div>
+          <div className="msg-decision-meta">{fromName} · {fmtTime(msg.created_at)}</div>
+        </div>
       </div>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--pencil)', letterSpacing: '0.08em', padding: '0 4px' }}>
-        <span>{msg.at}</span>
-        {mine && <span>· read</span>}
-        {msg.reactions && msg.reactions.length > 0 && (
-          <span style={{ background: 'var(--paper)', border: '0.5px solid var(--hair)', borderRadius: 999, padding: '1px 7px 1px', fontSize: 11, color: 'var(--ink)', letterSpacing: 0, marginLeft: 2 }}>
-            {msg.reactions.join(' ')}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function MessageRow({ msg, mine }) {
-  if (msg.decision) return <DecisionPin msg={msg} />;
+    );
+  }
   return (
-    <div style={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start', gap: 10, margin: '4px 0', alignItems: 'flex-end' }}>
-      {!mine && <Avatar who={msg.from === 's2' ? 's2' : 's1'} size={26} />}
-      <Bubble msg={msg} mine={mine} />
-      {mine && <Avatar who={msg.from === 's1' ? 's1' : 's2'} size={26} />}
-    </div>
-  );
-}
-
-function TypingIndicator({ otherUser }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, margin: '6px 0' }}>
-      <Avatar who={otherUser} size={26} />
-      <div style={{ background: 'var(--surface)', border: '0.5px solid var(--hair)', borderRadius: '18px 18px 18px 4px', padding: '11px 14px', display: 'flex', gap: 5, alignItems: 'center' }}>
-        <span className="typing-dot" style={{ animationDelay: '0ms' }} />
-        <span className="typing-dot" style={{ animationDelay: '160ms' }} />
-        <span className="typing-dot" style={{ animationDelay: '320ms' }} />
+    <div className={clsx('msg-row', mine && 'mine', isAi && 'ai')}>
+      {!mine && showAvatar && <Avatar who={isAi ? 'ai' : msg.from_user} size={26} />}
+      {!mine && !showAvatar && <span className="msg-avatar-gap" />}
+      <div className="msg-bubble-wrap">
+        {!mine && showAvatar && <div className="msg-from">{fromName}</div>}
+        <div className={clsx('msg-bubble', mine ? 'mine' : isAi ? 'ai' : 'theirs')}>
+          {msg.text && <div className="msg-text">{msg.text}</div>}
+          {msg.attachment && <AttachmentCard attachment={msg.attachment} videos={videos} prompts={prompts} />}
+          <div className="msg-meta-row">
+            <span className="msg-time">{fmtTime(msg.created_at)}</span>
+            {mine && <span className="msg-tick">✓✓</span>}
+            {mine && <button className="msg-del" onClick={onDelete} title="Delete">×</button>}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function MenuRow({ icon, label, sub, onClick, disabled }) {
-  return (
-    <button
-      onClick={disabled ? undefined : onClick}
-      style={{ display: 'grid', gridTemplateColumns: '22px 1fr', gap: 10, padding: '8px 14px', width: '100%', textAlign: 'left', fontFamily: 'var(--sans)', fontSize: 12.5, color: disabled ? 'var(--pencil)' : 'var(--ink)', opacity: disabled ? 0.6 : 1 }}
-      onMouseDown={e => e.preventDefault()}
-    >
-      <span style={{ fontFamily: 'var(--serif)', fontSize: 14, color: 'var(--terracotta)' }}>{icon}</span>
-      <span>
-        <span>{label}</span>
-        <span style={{ display: 'block', fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--pencil)', letterSpacing: '0.08em', marginTop: 2 }}>{sub}</span>
-      </span>
-    </button>
-  );
-}
+// ── attach sheet (mobile = bottom sheet, desktop = inline popover) ────────────
 
-function AttachMenu({ onClose, onVideo, onPrompt, onDecision }) {
+function AttachSheet({ onClose, onPickVideo, onPickPrompt, onDecide, videos, prompts }) {
   const [tab, setTab] = useState('actions');
   useEffect(() => {
-    const h = (e) => { if (!e.target.closest('.attach-menu')) onClose(); };
-    setTimeout(() => document.addEventListener('click', h), 0);
-    return () => document.removeEventListener('click', h);
+    const onEsc = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
   }, [onClose]);
   return (
-    <div className="attach-menu" style={{ position: 'absolute', bottom: 44, left: 0, width: 280, maxHeight: 320, overflow: 'hidden', background: 'var(--paper)', border: '0.5px solid var(--hair-strong)', borderRadius: 10, boxShadow: '0 12px 32px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', zIndex: 10 }}>
-      <div style={{ display: 'flex', borderBottom: '0.5px solid var(--hair)' }}>
-        {['actions', 'video', 'prompt'].map(k => (
-          <button key={k} onClick={() => setTab(k)} style={{ flex: 1, padding: '9px 8px', fontFamily: 'var(--mono)', fontSize: 9.5, letterSpacing: '0.14em', color: tab === k ? 'var(--ink)' : 'var(--pencil)', textTransform: 'uppercase', borderBottom: tab === k ? '1px solid var(--ink)' : 'none' }}>{k}</button>
-        ))}
-      </div>
-      <div style={{ overflowY: 'auto', flex: 1, padding: '6px 0' }}>
-        {tab === 'actions' && (
-          <>
-            <MenuRow icon="◆" label="Mark as decision" sub="Pins for both" onClick={onDecision} />
-            <MenuRow icon="✎" label="Quote previous" sub="(coming)" disabled />
-            <MenuRow icon="◉" label="Voice note" sub="(coming)" disabled />
-          </>
-        )}
-        {tab === 'video' && VIDEOS.slice(0, 8).map(v => (
-          <MenuRow key={v.id} icon="▶" label={v.title + (v.part ? ' · ' + v.part : '')} sub={v.status + ' · ' + v.tool} onClick={() => onVideo(v.id)} />
-        ))}
-        {tab === 'prompt' && PROMPTS.slice(0, 8).map(p => (
-          <MenuRow key={p.id} icon="✎" label={p.title} sub={p.tool.toLowerCase()} onClick={() => onPrompt(p.id)} />
-        ))}
+    <div className="attach-sheet-backdrop" onClick={onClose}>
+      <div className="attach-sheet" onClick={e => e.stopPropagation()}>
+        <div className="attach-sheet-handle" />
+        <div className="attach-sheet-tabs">
+          {['actions', 'video', 'prompt'].map(k => (
+            <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{k}</button>
+          ))}
+        </div>
+        <div className="attach-sheet-body">
+          {tab === 'actions' && (
+            <>
+              <button className="attach-sheet-row" onClick={onDecide}><span className="attach-sheet-icon">◆</span> Mark as decision</button>
+              <button className="attach-sheet-row" onClick={() => { setTab('video'); }}><span className="attach-sheet-icon">▶</span> Attach a video</button>
+              <button className="attach-sheet-row" onClick={() => { setTab('prompt'); }}><span className="attach-sheet-icon">✎</span> Attach a prompt</button>
+            </>
+          )}
+          {tab === 'video' && (videos || []).map(v => (
+            <button key={v.id} className="attach-sheet-row" onClick={() => onPickVideo(v.id)}>
+              <span className="attach-sheet-icon">▶</span>
+              <span>{v.title}{v.part ? ' — ' + v.part : ''}<small style={{ display: 'block', fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--pencil)', letterSpacing: '0.08em', marginTop: 2 }}>{v.status} · {v.tool}</small></span>
+            </button>
+          ))}
+          {tab === 'prompt' && (prompts || []).map(p => (
+            <button key={p.id} className="attach-sheet-row" onClick={() => onPickPrompt(p.id)}>
+              <span className="attach-sheet-icon">✎</span>
+              <span>{p.title}<small style={{ display: 'block', fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--pencil)', letterSpacing: '0.08em', marginTop: 2 }}>{p.tool.toLowerCase()}</small></span>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
-function Composer({ onSend, threadTitle, threadId }) {
+// ── decisions modal ───────────────────────────────────────────────────────────
+
+function DecisionsModal({ decisions, onClose }) {
+  return (
+    <Modal title={`Decisions · ${decisions.length}`} onClose={onClose} wide>
+      {decisions.length === 0 && (
+        <div style={{ padding: 24, textAlign: 'center', fontFamily: 'var(--serif)', fontStyle: 'italic', color: 'var(--pencil)' }}>
+          No decisions pinned yet. Use the ◆ option in the composer.
+        </div>
+      )}
+      {decisions.map(d => (
+        <div key={d.id} className="msg-decision-pin" style={{ marginBottom: 12 }}>
+          <div className="msg-decision-eyebrow">◆ Decision</div>
+          <div className="msg-decision-text">{d.decision_text}</div>
+          <div className="msg-decision-meta">{d.from_user === 's1' ? 'Shubhangam' : 'Sanjeevani'} · {fmtTime(d.created_at)}</div>
+        </div>
+      ))}
+    </Modal>
+  );
+}
+
+// ── conversation panel ────────────────────────────────────────────────────────
+
+function Conversation({ thread, currentUser, currentName, otherName, videos, prompts, online, onBack, onRenamed, onDeleted }) {
+  const { data: messages, setData: setMessages, refetch } = useResource(thread ? `/api/threads/${thread.id}/messages` : null);
+  const [typingPeer, setTypingPeer] = useState(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(thread?.title || '');
+  const [decisionsOpen, setDecisionsOpen] = useState(false);
+  const [attachSheet, setAttachSheet] = useState(false);
+  const [pendingAttach, setPendingAttach] = useState(null);
+  const scrollRef = useRef(null);
+  const typingTimer = useRef(null);
+
+  useEffect(() => { setTitleDraft(thread?.title || ''); setEditingTitle(false); }, [thread?.id]);
+
+  // Auto-scroll on new messages
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages?.length, typingPeer]);
+
+  // Listen for WS events for THIS thread
+  useEffect(() => {
+    if (!thread) return;
+    const unsub = socket.subscribe((ev) => {
+      if (ev.type === 'message.created' && ev.threadId === thread.id) {
+        setMessages(prev => {
+          const list = prev || [];
+          if (list.some(m => m.id === ev.message.id)) return list;
+          return [...list, ev.message];
+        });
+      } else if (ev.type === 'message.deleted' && ev.threadId === thread.id) {
+        setMessages(prev => (prev || []).filter(m => m.id !== ev.id));
+      } else if (ev.type === 'typing' && ev.threadId === thread.id && ev.userId !== currentUser) {
+        setTypingPeer(ev.userId);
+        if (typingTimer.current) clearTimeout(typingTimer.current);
+        typingTimer.current = setTimeout(() => setTypingPeer(null), 2500);
+      }
+    });
+    return unsub;
+  }, [thread?.id, currentUser, setMessages]);
+
+  const renameSave = async () => {
+    const t = titleDraft.trim();
+    if (!t || !thread) { setEditingTitle(false); return; }
+    await api.patch('/api/threads/' + thread.id, { title: t });
+    onRenamed?.({ ...thread, title: t });
+    setEditingTitle(false);
+  };
+
+  const sendMessage = async (payload) => {
+    if (!thread) return;
+    if (pendingAttach && payload.kind === 'text') {
+      // not used currently, but reserved
+    }
+    const body = { threadId: thread.id, ...payload };
+    try {
+      const created = await api.post('/api/messages', body);
+      setMessages(prev => {
+        const list = prev || [];
+        if (list.some(m => m.id === created.id)) return list;
+        return [...list, created];
+      });
+    } catch (err) { console.error(err); refetch(); }
+  };
+
+  const onTyping = () => {
+    socket.send({ type: 'typing', threadId: thread.id });
+  };
+
+  const deleteMessage = async (m) => {
+    if (!confirm('Delete this message?')) return;
+    await api.delete('/api/messages/' + m.id);
+    setMessages(prev => (prev || []).filter(x => x.id !== m.id));
+  };
+
+  const list = messages || [];
+  const decisions = list.filter(m => m.decision);
+
+  // Group by day + collapse consecutive messages from same sender
+  const grouped = useMemo(() => {
+    let lastDay = '';
+    let lastFrom = '';
+    return list.map((m, i) => {
+      const day = fmtDay(m.created_at);
+      const dayBreak = day !== lastDay;
+      const senderBreak = m.from_user !== lastFrom || dayBreak;
+      lastDay = day; lastFrom = m.from_user;
+      return { msg: m, dayBreak, day, senderBreak };
+    });
+  }, [list]);
+
+  if (!thread) {
+    return (
+      <div className="chat-empty">
+        <div style={{ fontFamily: 'var(--serif)', fontStyle: 'italic', color: 'var(--pencil)', fontSize: 20 }}>
+          Pick a thread or start a new one.
+        </div>
+      </div>
+    );
+  }
+
+  const fromName = (u) => u === 'ai' ? 'Claude' : u === 's1' ? 'Shubhangam' : 'Sanjeevani';
+
+  return (
+    <section className="chat-conv">
+      <header className="chat-header">
+        {onBack && <button className="chat-back" onClick={onBack} aria-label="Back"><span>‹</span></button>}
+        <Avatar who={thread.linked_video_id ? 's2' : 's1'} size={32} />
+        <div className="chat-header-info">
+          {editingTitle ? (
+            <input
+              autoFocus
+              value={titleDraft}
+              onChange={e => setTitleDraft(e.target.value)}
+              onBlur={renameSave}
+              onKeyDown={e => { if (e.key === 'Enter') renameSave(); if (e.key === 'Escape') setEditingTitle(false); }}
+              className="chat-title-input"
+            />
+          ) : (
+            <div className="chat-title" onClick={() => setEditingTitle(true)} title="Tap to rename">{thread.title}</div>
+          )}
+          <div className="chat-status">
+            <span className={`chat-status-dot ${online ? 'on' : 'off'}`} />
+            {online ? `${otherName} · active now` : 'offline'}
+          </div>
+        </div>
+        <button className="chat-decisions-btn" onClick={() => setDecisionsOpen(true)} title="Decisions">◆ {decisions.length}</button>
+        <button className="chat-delete-thread" onClick={() => { if (confirm(`Delete thread "${thread.title}"?`)) onDeleted(thread); }} title="Delete thread">⋯</button>
+      </header>
+
+      <div ref={scrollRef} className="chat-scroll">
+        {grouped.map(({ msg, dayBreak, day, senderBreak }, i) => (
+          <div key={msg.id}>
+            {dayBreak && (
+              <div className="chat-day">
+                <span>{day}</span>
+              </div>
+            )}
+            <MessageRow
+              msg={msg}
+              mine={msg.from_user === currentUser}
+              isAi={msg.from_user === 'ai'}
+              videos={videos} prompts={prompts}
+              showAvatar={senderBreak}
+              fromName={fromName(msg.from_user)}
+              onDelete={() => deleteMessage(msg)}
+            />
+          </div>
+        ))}
+        {typingPeer && (
+          <div className="msg-row">
+            <Avatar who={typingPeer} size={26} />
+            <div className="msg-bubble theirs typing">
+              <span className="typing-dot" />
+              <span className="typing-dot" style={{ animationDelay: '160ms' }} />
+              <span className="typing-dot" style={{ animationDelay: '320ms' }} />
+            </div>
+          </div>
+        )}
+        {list.length === 0 && (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--serif)', fontStyle: 'italic', color: 'var(--pencil)', fontSize: 16 }}>
+            Start the conversation.
+          </div>
+        )}
+      </div>
+
+      <ComposerWrapper threadId={thread.id} threadTitle={thread.title} videos={videos} prompts={prompts} onSend={sendMessage} onTyping={onTyping} />
+
+      {decisionsOpen && <DecisionsModal decisions={decisions} onClose={() => setDecisionsOpen(false)} />}
+    </section>
+  );
+}
+
+// Wrap Composer so the AttachSheet has access to videos/prompts
+function ComposerWrapper({ threadId, threadTitle, videos, prompts, onSend, onTyping }) {
   const [text, setText] = useState('');
-  const [attachOpen, setAttachOpen] = useState(false);
   const [decisionMode, setDecisionMode] = useState(false);
-  const taRef = useRef(null);
+  const [sheet, setSheet] = useState(false);
+  const ta = useRef(null);
 
   useEffect(() => {
     try { setText(localStorage.getItem('reel.chat.draft.' + threadId) || ''); } catch {}
@@ -242,123 +374,83 @@ function Composer({ onSend, threadTitle, threadId }) {
     try { localStorage.setItem('reel.chat.draft.' + threadId, text); } catch {}
   }, [text, threadId]);
 
-  const autosize = () => {
-    if (!taRef.current) return;
-    taRef.current.style.height = 'auto';
-    taRef.current.style.height = Math.min(160, taRef.current.scrollHeight) + 'px';
-  };
-  useEffect(autosize, [text]);
+  useEffect(() => {
+    if (!ta.current) return;
+    ta.current.style.height = 'auto';
+    ta.current.style.height = Math.min(140, ta.current.scrollHeight) + 'px';
+  }, [text]);
 
   const send = () => {
     const t = text.trim();
-    if (!t && !decisionMode) return;
-    onSend(decisionMode ? { kind: 'decision', text: t } : { kind: 'text', text: t });
+    if (!t) return;
+    if (decisionMode) onSend({ kind: 'decision', decision: true, decisionText: t });
+    else onSend({ kind: 'text', text: t });
+    setText(''); setDecisionMode(false);
     try { localStorage.removeItem('reel.chat.draft.' + threadId); } catch {}
+  };
+  const askClaude = () => {
+    const t = text.trim();
+    if (!t) return;
+    onSend({ kind: 'ai-prompt', text: t });
     setText('');
-    setDecisionMode(false);
+    try { localStorage.removeItem('reel.chat.draft.' + threadId); } catch {}
   };
 
-  const attachVideo  = (id) => { onSend({ kind: 'attach', attachment: { kind: 'video', id } }); setAttachOpen(false); };
-  const attachPrompt = (id) => { onSend({ kind: 'attach', attachment: { kind: 'prompt', id } }); setAttachOpen(false); };
-
   return (
-    <div style={{ borderTop: '0.5px solid var(--hair)', padding: '12px 16px 14px', background: 'var(--paper)', position: 'relative' }}>
+    <div className="composer">
       {decisionMode && (
-        <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.14em', color: 'var(--terracotta)', textTransform: 'uppercase' }}>
-          ◆ Decision mode
-          <button onClick={() => setDecisionMode(false)} style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--pencil)', letterSpacing: '0.06em', borderBottom: '0.5px solid var(--hair-strong)' }}>cancel</button>
+        <div className="composer-banner">
+          ◆ Decision mode — what's been agreed?
+          <button onClick={() => setDecisionMode(false)}>cancel</button>
         </div>
       )}
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, border: '0.5px solid ' + (decisionMode ? 'var(--terracotta)' : 'var(--hair-strong)'), borderRadius: 24, padding: '8px 8px 8px 14px', background: 'var(--paper)' }}>
-        <div style={{ position: 'relative' }}>
-          <button onClick={() => setAttachOpen(o => !o)} title="Attach" style={{ width: 32, height: 32, borderRadius: '50%', border: '0.5px solid var(--hair)', fontFamily: 'var(--serif)', fontSize: 18, color: 'var(--pencil)', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>+</button>
-          {attachOpen && <AttachMenu onClose={() => setAttachOpen(false)} onVideo={attachVideo} onPrompt={attachPrompt} onDecision={() => { setDecisionMode(true); setAttachOpen(false); }} />}
-        </div>
+      <div className={clsx('composer-box', decisionMode && 'decision')}>
+        <button className="composer-btn" onClick={() => setSheet(true)} title="Attach">+</button>
         <textarea
-          ref={taRef}
+          ref={ta}
           rows={1}
           value={text}
-          onChange={e => setText(e.target.value)}
+          onChange={e => { setText(e.target.value); onTyping?.(); }}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
           placeholder={decisionMode ? 'Write the decision…' : `Message ${threadTitle}…`}
-          style={{ flex: 1, resize: 'none', border: 0, outline: 0, background: 'transparent', fontFamily: 'var(--sans)', fontSize: 14, lineHeight: 1.5, color: 'var(--ink)', padding: '6px 0', maxHeight: 160, minHeight: 20 }}
         />
-        <button
-          onClick={send}
-          disabled={!text.trim()}
-          style={{ width: 34, height: 34, borderRadius: '50%', background: text.trim() ? 'var(--ink)' : 'var(--surface)', color: text.trim() ? 'var(--paper)' : 'var(--pencil)', fontFamily: 'var(--serif)', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 160ms, color 160ms', lineHeight: 1, flexShrink: 0 }}
-          title="Send (Enter)"
-        >↑</button>
+        <button className="composer-btn ai" onClick={askClaude} disabled={!text.trim()} title="Ask Claude (assistant)">✦</button>
+        <button className="composer-btn send" onClick={send} disabled={!text.trim()} title="Send">↑</button>
       </div>
+      {sheet && (
+        <AttachSheet
+          videos={videos}
+          prompts={prompts}
+          onClose={() => setSheet(false)}
+          onPickVideo={(id) => { onSend({ kind: 'attach', attachment: { kind: 'video', id } }); setSheet(false); }}
+          onPickPrompt={(id) => { onSend({ kind: 'attach', attachment: { kind: 'prompt', id } }); setSheet(false); }}
+          onDecide={() => { setDecisionMode(true); setSheet(false); }}
+        />
+      )}
     </div>
   );
 }
 
-function localReply(userText) {
-  const t = userText.toLowerCase().trim();
-  if (t.includes('?')) {
-    return ["let me think about that.", "good question. give me a minute.", "i'm not sure yet — what's your gut saying?", "hmm. let's revisit tomorrow with fresh eyes.", "not certain, but i have a direction."][Math.floor(Math.random() * 5)];
-  }
-  if (t.split(/\s+/).length <= 3 && /\b(hey|hi|hello|yo|ok|okay|sure|yep|yes|no|nope)\b/.test(t)) {
-    return ["yeah.", "ok.", "mm.", "with you.", "hey."][Math.floor(Math.random() * 5)];
-  }
-  if (/\b(shoot|filming|location|camera|shot|tripod|frame)\b/.test(t)) {
-    return ["let's lock the location first. what time works?", "golden hour would cut the editing time down.", "that angle works. add the wide opener before it?", "sounds right. should we storyboard tonight?"][Math.floor(Math.random() * 4)];
-  }
-  if (/\b(edit|cut|color|grade|grading|trim|splice)\b/.test(t)) {
-    return ["i'll look at the rough tonight. leave color for tomorrow.", "pacing feels long in the middle. trim from the 8s mark.", "warm it slightly. not full orange.", "let me take a pass first, then you adjust."][Math.floor(Math.random() * 4)];
-  }
-  if (/\b(idea|concept|thinking|maybe|what if|imagine)\b/.test(t)) {
-    return ["interesting. give me a minute to picture it.", "that could work. what's the hook in the first two seconds?", "i like it. write it down before we lose it.", "send me a reference if you find one."][Math.floor(Math.random() * 4)];
-  }
-  if (/\b(script|hook|narration|caption|voiceover|words)\b/.test(t)) {
-    return ["the hook is the hardest part. read it out loud once.", "fewer words. the frame says more anyway.", "keep the narration under 12 seconds.", "send me a draft when you have one."][Math.floor(Math.random() * 4)];
-  }
-  if (/\b(post|upload|publish|schedule|release|go live)\b/.test(t)) {
-    return ["tuesday evening. 7 pm usually lands well.", "let's not rush. one more day to sit with it.", "thumbnail first, then we go.", "both platforms at the same time?"][Math.floor(Math.random() * 4)];
-  }
-  if (/\b(tomorrow|tonight|today|this week|later|soon)\b/.test(t)) {
-    return ["i'll be around. send the file when it's ready.", "let's aim for 4 pm so we have buffer.", "message me when you start.", "i'm blocking time tomorrow afternoon."][Math.floor(Math.random() * 4)];
-  }
-  if (/\b(good|great|amazing|love|perfect|nice|beautiful|wow)\b/.test(t)) {
-    return ["yes. let's keep that energy.", "agreed. what's next?", "glad we got there.", "ok good. moving on."][Math.floor(Math.random() * 4)];
-  }
-  if (/\b(ai|prompt|picsart|gemini|tool|generate|model)\b/.test(t)) {
-    return ["try the PicsArt Flow batch. sometimes it surprises you.", "the gemini pass is faster for rough work.", "keep the prompt short. one mood, one instruction.", "let's test two versions and compare."][Math.floor(Math.random() * 4)];
-  }
-  if (/\b(problem|issue|broken|stuck|wrong|fail)\b/.test(t)) {
-    return ["what exactly broke? send me a screenshot.", "restart and try again. if it's still there, we look together.", "that's frustrating. give me 20 minutes.", "i had that last week. try the other export setting."][Math.floor(Math.random() * 4)];
-  }
-  if (Math.random() < 0.05) {
-    return ["what made you think of this now?", "is there a deadline we're working toward?", "have you seen any references for this?"][Math.floor(Math.random() * 3)];
-  }
-  return ["mm. let me think.", "agreed. let's do it.", "send me a frame when you have one.", "ok. i'll start there.", "makes sense. what's the next step?", "interesting. give me a minute.", "yeah, that works.", "let's not overthink it.", "i like where this is going.", "ok. same page.", "noted. what's the priority?"][Math.floor(Math.random() * 11)];
-}
+// ── chat page ─────────────────────────────────────────────────────────────────
 
-export default function Chat({ onMobileThreadOpenChange, currentUser = 's1' }) {
-  const otherUser = currentUser === 's2' ? 's1' : 's2';
+export default function Chat({ onMobileThreadOpenChange }) {
+  const { user } = useAuth();
+  const currentUser = user.id;
+  const otherUser = currentUser === 's1' ? 's2' : 's1';
   const otherName = otherUser === 's1' ? 'Shubhangam' : 'Sanjeevani';
+  const currentName = user.name;
 
-  const [threads, setThreads] = useState(() => {
-    try {
-      const saved = localStorage.getItem('reel.chat.v1');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return JSON.parse(JSON.stringify(CHAT_THREADS));
-  });
-
-  const [activeId, setActiveId] = useState(() => threads[0]?.id || null);
+  const { data: threads, setData: setThreads, refetch: refetchThreads } = useResource('/api/threads');
+  const { data: videos } = useResource('/api/videos');
+  const { data: prompts } = useResource('/api/prompts');
+  const [activeId, setActiveId] = useState(null);
   const [query, setQuery] = useState('');
-  const [typing, setTyping] = useState(false);
-  const [showDecisions, setShowDecisions] = useState(true);
+  const [online, setOnline] = useState({});
   const [mobileView, setMobileView] = useState('list');
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [titleDraft, setTitleDraft] = useState('');
-  const scrollRef = useRef(null);
+  const [lastMessages, setLastMessages] = useState({}); // threadId -> last msg
 
   const [isMobile, setIsMobile] = useState(() =>
-    typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches
-  );
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches);
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)');
     const h = (e) => setIsMobile(e.matches);
@@ -367,8 +459,8 @@ export default function Chat({ onMobileThreadOpenChange, currentUser = 's1' }) {
   }, []);
 
   useEffect(() => {
-    if (onMobileThreadOpenChange) onMobileThreadOpenChange(isMobile && mobileView === 'thread');
-  }, [isMobile, mobileView, onMobileThreadOpenChange]);
+    if (onMobileThreadOpenChange) onMobileThreadOpenChange(isMobile && mobileView === 'thread' && activeId);
+  }, [isMobile, mobileView, activeId, onMobileThreadOpenChange]);
 
   useEffect(() => {
     const onPop = () => setMobileView('list');
@@ -376,311 +468,141 @@ export default function Chat({ onMobileThreadOpenChange, currentUser = 's1' }) {
     return () => window.removeEventListener('reel:chat-back', onPop);
   }, []);
 
-  const active = threads.find(t => t.id === activeId) || threads[0] || null;
-
+  // Auto-select first thread
   useEffect(() => {
-    localStorage.setItem('reel.chat.v1', JSON.stringify(threads));
+    if (!activeId && threads && threads.length > 0) setActiveId(threads[0].id);
+  }, [threads, activeId]);
+
+  // Subscribe to socket events for thread list updates + presence
+  useEffect(() => {
+    const unsub = socket.subscribe((ev) => {
+      if (ev.type === 'hello') {
+        const map = {};
+        for (const u of ev.online || []) map[u] = true;
+        setOnline(map);
+      } else if (ev.type === 'presence') {
+        setOnline(prev => ({ ...prev, [ev.userId]: ev.online }));
+      } else if (ev.type === 'message.created') {
+        setLastMessages(prev => ({ ...prev, [ev.threadId]: ev.message }));
+      } else if (ev.type === 'thread.created') {
+        setThreads(prev => {
+          if ((prev || []).some(t => t.id === ev.thread.id)) return prev;
+          return [ev.thread, ...(prev || [])];
+        });
+      } else if (ev.type === 'thread.updated') {
+        setThreads(prev => (prev || []).map(t => t.id === ev.thread.id ? ev.thread : t));
+      } else if (ev.type === 'thread.deleted') {
+        setThreads(prev => (prev || []).filter(t => t.id !== ev.id));
+        if (ev.id === activeId) setActiveId(null);
+      }
+    });
+    return unsub;
+  }, [activeId, setThreads]);
+
+  // Prime last message map for thread list
+  useEffect(() => {
+    if (!threads) return;
+    threads.forEach(t => {
+      if (lastMessages[t.id]) return;
+      api.get(`/api/threads/${t.id}/messages?limit=1`).then(arr => {
+        if (arr && arr.length) setLastMessages(prev => ({ ...prev, [t.id]: arr[arr.length - 1] }));
+      }).catch(() => {});
+    });
+    // eslint-disable-next-line
   }, [threads]);
 
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [active?.days.length, active?.days.reduce((s, d) => s + d.messages.length, 0), typing, activeId]);
-
-  // Thread management
-  const addThread = () => {
-    const id = 'th' + Date.now();
-    const newThread = { id, title: 'New thread', days: [], pinned: false, linkedVideoId: null };
-    setThreads(prev => [newThread, ...prev]);
-    setActiveId(id);
-    if (isMobile) setMobileView('thread');
-    setTimeout(() => { setTitleDraft('New thread'); setEditingTitle(true); }, 80);
-  };
-
-  const deleteThread = (id, e) => {
-    if (e) e.stopPropagation();
-    setThreads(prev => {
-      const next = prev.filter(t => t.id !== id);
-      if (activeId === id) {
-        if (next.length > 0) setActiveId(next[0].id);
-        if (isMobile) setMobileView('list');
-      }
-      return next;
-    });
-  };
-
-  const renameThread = (id, title) => {
-    const trimmed = title.trim();
-    if (!trimmed) return;
-    setThreads(prev => prev.map(th => th.id === id ? { ...th, title: trimmed } : th));
-  };
-
-  // Messages
-  const addMessage = (threadId, msg) => {
-    setThreads(prev => prev.map(t => {
-      if (t.id !== threadId) return t;
-      const days = [...t.days];
-      const todayIdx = days.findIndex(d => d.label.startsWith('Today'));
-      const time = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      const stamped = { ...msg, at: time, id: 'u' + Date.now() + Math.random().toString(36).slice(2, 6) };
-      if (todayIdx >= 0) {
-        days[todayIdx] = { ...days[todayIdx], messages: [...days[todayIdx].messages, stamped] };
-      } else {
-        days.push({ label: 'Today — ' + new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), messages: [stamped] });
-      }
-      return { ...t, days };
-    }));
-  };
-
-  const triggerReply = async (threadId, userText) => {
-    setTyping(true);
-    let replyText = '';
-    try {
-      const threadSnap = threads.find(t => t.id === threadId) || { days: [], title: '' };
-      const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-      if (apiKey) {
-        try {
-          const recent = [];
-          threadSnap.days.forEach(d => d.messages.forEach(m => {
-            if (!m.text || m.decision) return;
-            recent.push(`${m.from === 's1' ? 'Shubhangam' : 'Sanjeevani'}: ${m.text}`);
-          }));
-          recent.push(`${currentUser === 's1' ? 'Shubhangam' : 'Sanjeevani'}: ${userText}`);
-          const context = recent.slice(-10).join('\n');
-          const persona = otherName;
-          const prompt = `You are ${persona}, co-creator of "Reel Studio" — a calm, indie short-form video studio. You make cinematic, AI-assisted shorts for YouTube + Instagram. The current thread is "${threadSnap.title}". You are texting now.\n\nStyle rules:\n- Reply in 1-2 short sentences. Casual lowercase. Warm but practical.\n- No emojis. No exclamation marks. No AI-assistant phrasing.\n- Sometimes propose a tiny concrete next step.\n\nRecent thread:\n${context}\n\nReply now as ${persona} (just the message text, no name prefix):`;
-          const res = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-            body: JSON.stringify({ model: 'claude-haiku-4-5', max_tokens: 120, messages: [{ role: 'user', content: prompt }] }),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            replyText = (data.content?.[0]?.text || '').trim().replace(/^[A-Za-z]+:\s*/, '').replace(/^"|"$/g, '').slice(0, 280);
-          }
-        } catch {}
-      }
-      if (!replyText) replyText = localReply(userText);
-      const delay = Math.min(1800, 350 + replyText.length * 18);
-      await new Promise(r => setTimeout(r, delay));
-      addMessage(threadId, { from: otherUser, text: replyText });
-    } finally {
-      setTyping(false);
-    }
-  };
-
-  const handleSend = async (payload) => {
-    if (!active) return;
-    if (payload.kind === 'text') {
-      addMessage(active.id, { from: currentUser, text: payload.text });
-      triggerReply(active.id, payload.text);
-    } else if (payload.kind === 'decision') {
-      addMessage(active.id, { from: currentUser, text: '', decision: true, decisionText: payload.text });
-    } else if (payload.kind === 'attach') {
-      addMessage(active.id, { from: currentUser, text: '', attachment: payload.attachment });
-    }
-  };
-
-  const items = active ? flattenMessages(active) : [];
-  const decisions = active ? decisionsOf(active) : [];
-  const linkedVideo = active?.linkedVideoId ? VIDEOS.find(v => v.id === active.linkedVideoId) : null;
-
-  const filteredThreads = threads.filter(t => {
+  const active = (threads || []).find(t => t.id === activeId) || null;
+  const filtered = (threads || []).filter(t => {
     if (!query) return true;
-    const hay = (t.title + ' ' + (lastMessageOf(t)?.text || '')).toLowerCase();
-    return hay.includes(query.toLowerCase());
+    const last = lastMessages[t.id];
+    return (t.title + ' ' + (last?.text || '')).toLowerCase().includes(query.toLowerCase());
   });
 
+  const addThread = async () => {
+    const created = await api.post('/api/threads', { title: 'New thread' });
+    setThreads(prev => [created, ...(prev || [])]);
+    setActiveId(created.id);
+    if (isMobile) setMobileView('thread');
+  };
+  const deleteThread = async (t) => {
+    await api.delete('/api/threads/' + t.id);
+    setThreads(prev => (prev || []).filter(x => x.id !== t.id));
+    if (activeId === t.id) {
+      const next = (threads || []).filter(x => x.id !== t.id);
+      setActiveId(next[0]?.id || null);
+      if (isMobile) setMobileView('list');
+    }
+  };
+  const renameThread = (updated) => {
+    setThreads(prev => (prev || []).map(t => t.id === updated.id ? { ...t, ...updated } : t));
+  };
+
   return (
-    <div className="page-enter">
-      <div className="greeting">
+    <div className="page-enter chat-page">
+      <div className="greeting chat-greeting">
         <div>
-          <div className="eyebrow" style={{ marginBottom: 14 }}>[ 03 ] &nbsp; Chat &nbsp;— &nbsp; two hands, one thread</div>
+          <div className="eyebrow" style={{ marginBottom: 14 }}>[ 03 ] &nbsp; Chat</div>
           <h1>Talking <span style={{ fontStyle: 'italic' }}>about the work.</span></h1>
-          <div className="sub">{threads.length} threads · {decisions.length ? `${decisions.length} decisions pinned` : 'still deciding'}.</div>
-        </div>
-        <div className="right">
-          <div className="label">Both online</div>
-          <div className="value" style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center' }}>
-            <Avatar who="s1" size={28} />
-            <Avatar who="s2" size={28} />
-          </div>
-          <div className="note">last reply 2 min ago</div>
         </div>
       </div>
 
-      <div
-        className="chat-shell"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : '292px 1fr',
-          height: isMobile
-            ? 'calc(100dvh - env(safe-area-inset-top, 0px) - 52px - 96px - env(safe-area-inset-bottom, 0px))'
-            : 'min(78vh, 760px)',
-          minHeight: isMobile ? 0 : 580,
-          border: '0.5px solid var(--hair)',
-          borderRadius: isMobile ? 0 : 8,
-          overflow: 'hidden',
-          background: 'var(--paper)',
-          ...(isMobile ? { margin: '0 -18px', width: 'calc(100% + 36px)' } : {}),
-        }}
-      >
-        {/* ─── Thread list: conditionally rendered (fixes the CSS override bug) ─── */}
-        {(!isMobile || mobileView === 'list') && (
-          <aside className="chat-list" style={{ borderRight: '0.5px solid var(--hair)', display: 'flex', flexDirection: 'column', background: 'var(--paper)', minHeight: 0 }}>
-            <div style={{ padding: '16px 14px 12px', borderBottom: '0.5px solid var(--hair)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <span className="eyebrow">threads</span>
-                <button
-                  onClick={addThread}
-                  style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--paper)', background: 'var(--ink)', padding: '4px 12px', borderRadius: 999 }}
-                >+ new</button>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, border: '0.5px solid var(--hair)', borderRadius: 999, padding: '7px 12px' }}>
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--pencil)', letterSpacing: '0.08em' }}>⌕</span>
-                <input
-                  placeholder="Search…"
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  style={{ flex: 1, border: 0, outline: 0, background: 'transparent', fontFamily: 'var(--sans)', fontSize: 12.5 }}
-                />
-              </div>
+      <div className={clsx('chat-shell', isMobile && (mobileView === 'thread' ? 'show-thread' : 'show-list'))}>
+        <aside className="chat-list">
+          <div className="chat-list-head">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span className="eyebrow">Threads</span>
+              <span style={{ flex: 1 }} />
+              <button className="chat-new" onClick={addThread}>+ new</button>
             </div>
-            <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-              {filteredThreads.map(t => (
-                <div key={t.id} style={{ position: 'relative' }}>
-                  <ThreadListItem
-                    thread={t}
-                    active={t.id === activeId}
-                    lastMsg={lastMessageOf(t)}
-                    currentUser={currentUser}
-                    onClick={() => { setActiveId(t.id); if (isMobile) setMobileView('thread'); }}
-                  />
-                  <button
-                    className="thread-delete-btn"
-                    onClick={(e) => deleteThread(t.id, e)}
-                    title="Delete thread"
-                  >×</button>
-                </div>
-              ))}
-              {filteredThreads.length === 0 && !query && (
-                <div style={{ padding: '48px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-                  <div style={{ fontFamily: 'var(--serif)', fontStyle: 'italic', color: 'var(--pencil)', fontSize: 16 }}>No threads yet.</div>
-                  <button onClick={addThread} style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--paper)', background: 'var(--ink)', padding: '6px 14px', borderRadius: 999 }}>Start one →</button>
-                </div>
-              )}
-              {filteredThreads.length === 0 && query && (
-                <div style={{ padding: 24, textAlign: 'center', fontFamily: 'var(--serif)', fontStyle: 'italic', color: 'var(--pencil)' }}>no threads match.</div>
-              )}
+            <div className="chat-search">
+              <span>⌕</span>
+              <input placeholder="Search…" value={query} onChange={e => setQuery(e.target.value)} />
             </div>
-          </aside>
-        )}
-
-        {/* ─── Conversation: conditionally rendered (no more CSS override conflict) ─── */}
-        {active && (!isMobile || mobileView === 'thread') && (
-          <section
-            className="chat-conv"
-            style={{ display: 'flex', flexDirection: 'column', minHeight: 0, background: 'var(--paper)' }}
-          >
-            <div className="chat-conv-header" style={{ padding: '12px 16px', borderBottom: '0.5px solid var(--hair)', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--paper)' }}>
-              {/* Back button: CSS shows it on mobile via .chat-conv-header .back-btn rule */}
-              <button className="back-btn" onClick={() => setMobileView('list')}>
-                <span style={{ fontFamily: 'var(--serif)', fontSize: 18, lineHeight: 1 }}>‹</span>
-              </button>
-              <Avatar who={otherUser} size={30} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                {editingTitle ? (
-                  <input
-                    autoFocus
-                    value={titleDraft}
-                    onChange={e => setTitleDraft(e.target.value)}
-                    onBlur={() => { renameThread(active.id, titleDraft); setEditingTitle(false); }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') { renameThread(active.id, titleDraft); setEditingTitle(false); }
-                      if (e.key === 'Escape') setEditingTitle(false);
-                    }}
-                    style={{ fontFamily: 'var(--serif)', fontSize: 19, lineHeight: 1, letterSpacing: '-0.005em', border: 0, outline: 0, background: 'transparent', borderBottom: '1.5px solid var(--ink)', width: '100%', color: 'var(--ink)' }}
-                  />
-                ) : (
-                  <div
-                    style={{ fontFamily: 'var(--serif)', fontSize: 19, lineHeight: 1, letterSpacing: '-0.005em', cursor: 'text', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                    onClick={() => { setTitleDraft(active.title); setEditingTitle(true); }}
-                    title="Tap to rename"
-                  >
-                    {active.title}
-                  </div>
-                )}
-                <div style={{ fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--pencil)', letterSpacing: '0.1em', marginTop: 4, display: 'flex', alignItems: 'center', gap: 8, textTransform: 'uppercase' }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--sage)', display: 'inline-block' }} />
-                  {otherName} · active now
-                  {linkedVideo && <>
-                    <span style={{ opacity: 0.5 }}>·</span>
-                    <span style={{ padding: '2px 8px', border: '0.5px solid var(--hair-strong)', borderRadius: 999, fontSize: 9, letterSpacing: '0.12em' }}>
-                      ▶ {linkedVideo.title}{linkedVideo.part ? ' — ' + linkedVideo.part : ''}
-                    </span>
-                  </>}
-                </div>
-              </div>
-              <button
-                onClick={() => setShowDecisions(v => !v)}
-                style={{ fontFamily: 'var(--mono)', fontSize: 9.5, letterSpacing: '0.14em', color: showDecisions ? 'var(--ink)' : 'var(--pencil)', textTransform: 'uppercase', padding: '5px 10px', borderRadius: 999, border: '0.5px solid var(--hair-strong)', flexShrink: 0 }}
-              >
-                ◆ {decisions.length}
-              </button>
-            </div>
-
-            {showDecisions && decisions.length > 0 && (
-              <div style={{ padding: '10px 16px', background: 'var(--surface)', borderBottom: '0.5px solid var(--hair)', display: 'flex', gap: 10, overflowX: 'auto' }}>
-                {decisions.map((d, i) => (
-                  <div key={i} style={{ flex: '0 0 auto', maxWidth: 300, background: 'var(--paper)', border: '0.5px dashed var(--terracotta)', borderRadius: 6, padding: '8px 12px' }}>
-                    <div style={{ fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.16em', color: 'var(--terracotta)', textTransform: 'uppercase' }}>◆ Decision</div>
-                    <div style={{ fontFamily: 'var(--serif)', fontStyle: 'italic', fontSize: 13, color: 'var(--ink)', lineHeight: 1.35, marginTop: 2 }}>{d.decisionText}</div>
-                  </div>
-                ))}
+          </div>
+          <div className="chat-list-scroll">
+            {filtered.map(t => (
+              <ThreadItem
+                key={t.id}
+                thread={t}
+                lastMsg={lastMessages[t.id]}
+                active={t.id === activeId}
+                currentUser={currentUser}
+                otherUserName={otherName}
+                online={t.linked_video_id ? online[otherUser] : online[otherUser]}
+                onClick={() => { setActiveId(t.id); if (isMobile) setMobileView('thread'); }}
+                onDelete={() => { if (confirm(`Delete thread "${t.title}"?`)) deleteThread(t); }}
+              />
+            ))}
+            {filtered.length === 0 && !query && (
+              <div style={{ padding: '40px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+                <div style={{ fontFamily: 'var(--serif)', fontStyle: 'italic', color: 'var(--pencil)', fontSize: 16 }}>No threads yet.</div>
+                <button className="chat-new" onClick={addThread}>+ Start one</button>
               </div>
             )}
-
-            <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', minHeight: 0, padding: '8px 16px 18px', display: 'flex', flexDirection: 'column', background: 'radial-gradient(circle at 80% 0%, rgba(196,133,106,0.04), transparent 50%), radial-gradient(circle at 0% 100%, rgba(143,175,138,0.04), transparent 45%)' }}>
-              {items.map((it, i) => {
-                if (it.kind === 'day') return <DateDivider key={'d' + i} label={it.label} />;
-                return <MessageRow key={it.id} msg={it} mine={it.from === currentUser} />;
-              })}
-              {items.length === 0 && (
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--serif)', fontStyle: 'italic', color: 'var(--pencil)', fontSize: 16 }}>
-                  Start the conversation.
-                </div>
-              )}
-              {typing && <TypingIndicator otherUser={otherUser} />}
-            </div>
-
-            <Composer onSend={handleSend} threadTitle={active.title} threadId={active.id} />
-          </section>
-        )}
-
-        {/* Empty state when no threads */}
-        {threads.length === 0 && (
-          <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 40 }}>
-            <div style={{ fontFamily: 'var(--serif)', fontStyle: 'italic', color: 'var(--pencil)', fontSize: 18 }}>No threads yet.</div>
-            <button onClick={addThread} style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.12em', color: 'var(--paper)', background: 'var(--ink)', padding: '8px 18px', borderRadius: 999 }}>+ Start a thread</button>
+            {filtered.length === 0 && query && (
+              <div style={{ padding: 24, textAlign: 'center', fontFamily: 'var(--serif)', fontStyle: 'italic', color: 'var(--pencil)' }}>
+                no threads match.
+              </div>
+            )}
           </div>
-        )}
+        </aside>
+
+        <Conversation
+          thread={active}
+          currentUser={currentUser}
+          currentName={currentName}
+          otherName={otherName}
+          videos={videos}
+          prompts={prompts}
+          online={online[otherUser]}
+          onBack={isMobile ? () => setMobileView('list') : null}
+          onRenamed={renameThread}
+          onDeleted={deleteThread}
+        />
       </div>
 
-      <div style={{ marginTop: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--pencil)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-        <span>↑ {otherName} replies on her own. Try sending a thought.</span>
-        <button
-          onClick={() => {
-            if (confirm('Reset chat to seed conversations?')) {
-              localStorage.removeItem('reel.chat.v1');
-              setThreads(JSON.parse(JSON.stringify(CHAT_THREADS)));
-              setActiveId(CHAT_THREADS[0]?.id || null);
-            }
-          }}
-          style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--pencil)', letterSpacing: '0.1em', borderBottom: '0.5px solid var(--hair-strong)' }}
-        >
-          reset thread →
-        </button>
+      <div className="chat-foot">
+        <span>Tip: type <code>@claude</code> or tap ✦ to ask the assistant. Real messages send instantly between both of you.</span>
       </div>
     </div>
   );

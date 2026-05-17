@@ -1,48 +1,61 @@
-import { useState, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
+import { api } from '../lib/api.js';
 
 export { clsx };
 
-const TWEAKS_KEY = 'reel.tweaks.v1';
+export const TWEAK_DEFAULTS = {
+  accents: 'sage_terra',
+  paper: 'warm',
+  density: 'regular',
+  fontScale: 14,
+  chartStyle: 'area',
+  ytFirst: false,
+  annotations: true,
+};
 
-// useTweaks hook
-export function useTweaks(defaults) {
-  const [values, setValues] = useState(() => {
-    try {
-      const saved = localStorage.getItem(TWEAKS_KEY);
-      if (saved) return { ...defaults, ...JSON.parse(saved) };
-    } catch {}
-    return defaults;
-  });
+// Server-backed tweaks. Loads on mount, debounces writes.
+export function useTweaks(defaults = TWEAK_DEFAULTS) {
+  const [values, setValues] = useState(defaults);
+  const saveTimer = useRef(null);
+  const loaded = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/api/settings/me')
+      .then(s => { if (!cancelled) setValues({ ...defaults, ...(s || {}) }); })
+      .catch(() => {})
+      .finally(() => { loaded.current = true; });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line
+  }, []);
+
   const setTweak = useCallback((keyOrEdits, val) => {
     const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
       ? keyOrEdits : { [keyOrEdits]: val };
     setValues((prev) => {
       const next = { ...prev, ...edits };
-      try { localStorage.setItem(TWEAKS_KEY, JSON.stringify(next)); } catch {}
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => {
+        api.put('/api/settings/me', next).catch(() => {});
+      }, 250);
       return next;
     });
-    try { window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*'); } catch (e) {}
-    window.dispatchEvent(new CustomEvent('tweakchange', { detail: edits }));
   }, []);
-  return [values, setTweak];
+
+  const reset = useCallback(async () => {
+    try { await api.delete('/api/settings/me'); } catch {}
+    setValues(defaults);
+  }, [defaults]);
+
+  return [values, setTweak, reset];
 }
 
-export const TWEAK_DEFAULTS = {
-  accents: 'ocean_rust',
-  paper: 'cool',
-  density: 'regular',
-  fontScale: 14,
-  chartStyle: 'area',
-  ytFirst: true,
-  annotations: true,
-};
-
-// Shared UI components
 export function Avatar({ who, size }) {
-  const cls = who === 's1' ? 's1' : 's2';
+  const cls = who === 'ai' ? 'ai' : who === 's1' ? 's1' : 's2';
   const style = size ? { width: size, height: size, fontSize: Math.max(10, size * 0.45) } : null;
-  return <div className={clsx('avatar', cls)} style={style}>S</div>;
+  const label = who === 'ai' ? '✦' : 'S';
+  return <div className={clsx('avatar', cls)} style={style}>{label}</div>;
 }
 
 export function AvatarStack({ whos }) {
@@ -66,4 +79,30 @@ export function SectionHead({ num, title, sub, right }) {
       {right && <div className="right">{right}</div>}
     </div>
   );
+}
+
+// Common modal shell
+export function Modal({ title, onClose, children, footer, wide }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className={clsx('modal', wide && 'modal-wide')} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <div className="modal-title">{title}</div>
+          <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
+        </div>
+        <div className="modal-body">{children}</div>
+        {footer && <div className="modal-foot">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
+// Confirm dialog
+export function useConfirm() {
+  return (msg) => window.confirm(msg);
 }

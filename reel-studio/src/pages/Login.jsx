@@ -1,16 +1,25 @@
-export default function Login({ onLogin }) {
+import { useState } from 'react';
+import { useAuth } from '../lib/AuthProvider.jsx';
+
+export default function Login() {
+  const { login, error, setError } = useAuth();
+  const [username, setUsername] = useState('shubhangam');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e) => {
+    e?.preventDefault?.();
+    if (!username || !password) return;
+    setBusy(true); setError(null);
+    try { await login(username, password); }
+    catch {}
+    finally { setBusy(false); }
+  };
+
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'var(--paper)',
-      padding: '24px 18px',
-    }}>
-      <div style={{ maxWidth: 380, width: '100%' }}>
-        <div style={{ textAlign: 'center', marginBottom: 56 }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--paper)', padding: '24px 18px' }}>
+      <form onSubmit={submit} style={{ maxWidth: 380, width: '100%' }}>
+        <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <div style={{ fontFamily: 'var(--serif)', fontSize: 48, letterSpacing: '-0.02em', lineHeight: 1 }}>
             Reel<span style={{ fontStyle: 'italic', color: 'var(--terracotta)' }}>Studio</span>
           </div>
@@ -20,41 +29,55 @@ export default function Login({ onLogin }) {
         </div>
 
         <div style={{ fontFamily: 'var(--serif)', fontStyle: 'italic', fontSize: 26, color: 'var(--ink)', textAlign: 'center', marginBottom: 6 }}>
-          Who's here?
+          Welcome back.
         </div>
         <div style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--pencil)', textAlign: 'center', marginBottom: 32 }}>
-          Choose your identity — saved for this session.
+          Sign in to the studio.
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {[
-            { who: 's1', name: 'Shubhangam', role: 'Creator · Director' },
-            { who: 's2', name: 'Sanjeevani', role: 'Editor · Producer' },
-          ].map(({ who, name, role }) => (
-            <button
-              key={who}
-              onClick={() => onLogin(who)}
-              className="login-choice-btn"
-            >
-              <div className={`login-avatar avatar ${who}`}>S</div>
-              <div style={{ flex: 1, textAlign: 'left' }}>
-                <div style={{ fontFamily: 'var(--serif)', fontSize: 22, color: 'var(--ink)', lineHeight: 1 }}>{name}</div>
-                <div style={{ fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--pencil)', letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: 5 }}>{role}</div>
-              </div>
-              <div style={{ fontFamily: 'var(--serif)', fontSize: 24, color: 'var(--pencil)', lineHeight: 1 }}>›</div>
-            </button>
-          ))}
-        </div>
+        <label className="login-field">
+          <span className="login-label">Username</span>
+          <input
+            className="login-input"
+            value={username}
+            onChange={e => setUsername(e.target.value)}
+            autoComplete="username"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            placeholder="shubhangam"
+          />
+        </label>
 
-        <div style={{ textAlign: 'center', marginTop: 36 }}>
-          <button
-            onClick={() => onLogin('guest')}
-            style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--pencil)', letterSpacing: '0.12em', borderBottom: '0.5px solid var(--hair-strong)', paddingBottom: 1 }}
-          >
-            Browse as guest →
-          </button>
+        <label className="login-field">
+          <span className="login-label">Password</span>
+          <input
+            type="password"
+            className="login-input"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            autoComplete="current-password"
+            placeholder="••••••••"
+          />
+        </label>
+
+        {error && (
+          <div style={{ marginTop: 14, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--terracotta)', letterSpacing: '0.06em' }}>
+            {error}
+          </div>
+        )}
+
+        <button type="submit" disabled={busy || !username || !password} className="login-submit" style={{ marginTop: 22 }}>
+          {busy ? 'opening…' : 'Sign in →'}
+        </button>
+
+        <div style={{ marginTop: 28, padding: 14, background: 'var(--surface)', borderRadius: 6, fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--pencil)', letterSpacing: '0.06em', lineHeight: 1.7 }}>
+          <div style={{ color: 'var(--ink)', marginBottom: 6, letterSpacing: '0.14em', textTransform: 'uppercase', fontSize: 9.5 }}>seed accounts</div>
+          <div><b style={{ color: 'var(--ink)' }}>shubhangam</b> · changeme-shub</div>
+          <div><b style={{ color: 'var(--ink)' }}>sanjeevani</b> · changeme-san</div>
+          <div style={{ marginTop: 6, fontStyle: 'italic', fontFamily: 'var(--serif)' }}>change in Settings after first login.</div>
         </div>
-      </div>
+      </form>
     </div>
   );
 }
